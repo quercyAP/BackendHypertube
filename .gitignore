@@ -1,0 +1,57 @@
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Build outputs
+bin/
+obj/
+out/
+dist/
+build/
+*.dll
+*.exe
+*.pdb
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+*.env
+docker-compose.override.yml
+
+# Test coverage
+coverage/
+*.cover
+.nyc_output/
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*~
+
+backend/src/WebAPI/Hypertube.WebAPI/downloads
+backend\tests\BitTorrent.ComparativeTests\cache

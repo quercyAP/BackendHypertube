@@ -1,0 +1,69 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{257D4AAB-0903-45C8-8E8C-0ECE4C2868E8}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Domain", "Domain", "{11BC405D-F4D4-4665-8E66-93EEFE22DE7A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Hypertube.Domain", "src\Domain\Hypertube.Domain\Hypertube.Domain.csproj", "{71C2703B-8737-4524-B7D4-6BDFBF32E246}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Application", "Application", "{7E06667B-41E4-4943-ABDA-D6BFC82D10C2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Hypertube.Application", "src\Application\Hypertube.Application\Hypertube.Application.csproj", "{2EE3DBC1-7015-4E82-9200-195105ADBB55}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Infrastructure", "Infrastructure", "{5CD49D34-E0FD-46BB-B47E-D2BC5EB9DA47}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Hypertube.Infrastructure", "src\Infrastructure\Hypertube.Infrastructure\Hypertube.Infrastructure.csproj", "{2B478230-0C41-4FC0-8704-4DA5643BA2E9}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "WebAPI", "WebAPI", "{25739C7A-AB54-4F92-9FFD-775EF6D24A42}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Hypertube.WebAPI", "src\WebAPI\Hypertube.WebAPI\Hypertube.WebAPI.csproj", "{209AB386-9B8D-4225-97E7-CF1A63B8E854}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{039988A0-6EB4-4E58-B549-6F7ED611FCFD}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BitTorrent.ComparativeTests", "tests\BitTorrent.ComparativeTests\BitTorrent.ComparativeTests.csproj", "{AC0A9FE5-38BB-4A6C-92B7-DB3B5E191346}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{71C2703B-8737-4524-B7D4-6BDFBF32E246}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{71C2703B-8737-4524-B7D4-6BDFBF32E246}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{71C2703B-8737-4524-B7D4-6BDFBF32E246}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{71C2703B-8737-4524-B7D4-6BDFBF32E246}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2EE3DBC1-7015-4E82-9200-195105ADBB55}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2EE3DBC1-7015-4E82-9200-195105ADBB55}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2EE3DBC1-7015-4E82-9200-195105ADBB55}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2EE3DBC1-7015-4E82-9200-195105ADBB55}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2B478230-0C41-4FC0-8704-4DA5643BA2E9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2B478230-0C41-4FC0-8704-4DA5643BA2E9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2B478230-0C41-4FC0-8704-4DA5643BA2E9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2B478230-0C41-4FC0-8704-4DA5643BA2E9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{209AB386-9B8D-4225-97E7-CF1A63B8E854}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{209AB386-9B8D-4225-97E7-CF1A63B8E854}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{209AB386-9B8D-4225-97E7-CF1A63B8E854}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{209AB386-9B8D-4225-97E7-CF1A63B8E854}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AC0A9FE5-38BB-4A6C-92B7-DB3B5E191346}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AC0A9FE5-38BB-4A6C-92B7-DB3B5E191346}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AC0A9FE5-38BB-4A6C-92B7-DB3B5E191346}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AC0A9FE5-38BB-4A6C-92B7-DB3B5E191346}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{11BC405D-F4D4-4665-8E66-93EEFE22DE7A} = {257D4AAB-0903-45C8-8E8C-0ECE4C2868E8}
+		{71C2703B-8737-4524-B7D4-6BDFBF32E246} = {11BC405D-F4D4-4665-8E66-93EEFE22DE7A}
+		{7E06667B-41E4-4943-ABDA-D6BFC82D10C2} = {257D4AAB-0903-45C8-8E8C-0ECE4C2868E8}
+		{2EE3DBC1-7015-4E82-9200-195105ADBB55} = {7E06667B-41E4-4943-ABDA-D6BFC82D10C2}
+		{5CD49D34-E0FD-46BB-B47E-D2BC5EB9DA47} = {257D4AAB-0903-45C8-8E8C-0ECE4C2868E8}
+		{2B478230-0C41-4FC0-8704-4DA5643BA2E9} = {5CD49D34-E0FD-46BB-B47E-D2BC5EB9DA47}
+		{25739C7A-AB54-4F92-9FFD-775EF6D24A42} = {257D4AAB-0903-45C8-8E8C-0ECE4C2868E8}
+		{209AB386-9B8D-4225-97E7-CF1A63B8E854} = {25739C7A-AB54-4F92-9FFD-775EF6D24A42}
+		{AC0A9FE5-38BB-4A6C-92B7-DB3B5E191346} = {039988A0-6EB4-4E58-B549-6F7ED611FCFD}
+	EndGlobalSection
+EndGlobal

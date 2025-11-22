@@ -1,0 +1,114 @@
+# ==============================================
+# Hypertube Backend API - Development Environment
+# ==============================================
+# Configuration pour le backend uniquement (sans frontend)
+#
+# Usage:
+#   docker-compose up         # Démarre tous les services
+#   docker-compose up -d      # Démarre en arrière-plan
+#   docker-compose down       # Arrête tous les services
+#   docker-compose logs -f    # Affiche les logs en temps réel
+#
+# Services:
+#   - db (PostgreSQL 16)      http://localhost:5432
+#   - backend (.NET 8 API)    http://localhost:5000
+#
+# API Documentation:
+#   - Swagger UI: http://localhost:5000/swagger
+#   - Health Check: http://localhost:5000/api/v1/health
+#
+# Pour tester l'API:
+#   cd backend && ./API_TESTS.sh
+#
+# ==============================================
+
+services:
+  # ==========================================
+  # PostgreSQL Database
+  # ==========================================
+  db:
+    image: postgres:16-alpine
+    container_name: hypertube-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-hypertube}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: ${POSTGRES_DB:-hypertube}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - hypertube-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hypertube}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ==========================================
+  # Backend API (.NET 8) with Hot Reload
+  # ==========================================
+  backend:
+    image: mcr.microsoft.com/dotnet/sdk:8.0
+    container_name: hypertube-backend
+    restart: unless-stopped
+    working_dir: /src
+    ports:
+      - "5000:5000"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:5000
+      DATABASE_URL: "Host=db;Database=${POSTGRES_DB:-hypertube};Username=${POSTGRES_USER:-hypertube};Password=${POSTGRES_PASSWORD:-changeme}"
+      JWT_SECRET: ${JWT_SECRET}
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY}
+      TMDB_API_KEY: ${TMDB_API_KEY}
+      TMDB_TOKEN: ${TMDB_TOKEN}
+      OMDB_API_KEY: ${OMDB_API_KEY}
+      OPENSUBTITLES_API_KEY: ${OPENSUBTITLES_API_KEY}
+      OAUTH_42_CLIENT_ID: ${OAUTH_42_CLIENT_ID}
+      OAUTH_42_CLIENT_SECRET: ${OAUTH_42_CLIENT_SECRET}
+      GOOGLE_CLIENT_ID: ${OAUTH_GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${OAUTH_GOOGLE_CLIENT_SECRET}
+    volumes:
+      - ./backend:/src
+      - videos-data:/app/videos
+      - logs-data:/app/logs
+      - uploads-data:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - hypertube-net
+    command: >
+      sh -c "dotnet restore &&
+             cd src/WebAPI/Hypertube.WebAPI &&
+             dotnet watch run --no-restore --urls http://0.0.0.0:5000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+# ==========================================
+# Networks
+# ==========================================
+networks:
+  hypertube-net:
+    driver: bridge
+    name: hypertube-network
+
+# ==========================================
+# Volumes
+# ==========================================
+volumes:
+  postgres-data:
+    name: hypertube-postgres-data
+  videos-data:
+    name: hypertube-videos-data
+  logs-data:
+    name: hypertube-logs-data
+  uploads-data:
+    name: hypertube-uploads-data
