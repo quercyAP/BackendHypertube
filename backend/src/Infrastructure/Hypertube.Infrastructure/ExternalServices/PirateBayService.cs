@@ -145,16 +145,14 @@ public class PirateBayService
     private string BuildMagnetLink(string infoHash, string name)
     {
         return $"magnet:?xt=urn:btih:{infoHash}&dn={Uri.EscapeDataString(name)}" +
-               "&tr=udp://tracker.coppersurfer.tk:6969/announce" +
-               "&tr=udp://9.rarbg.to:2920/announce" +
-               "&tr=udp://tracker.opentrackr.org:1337" +
-               "&tr=udp://tracker.internetwarriors.net:1337/announce" +
-               "&tr=udp://tracker.leechers-paradise.org:6969/announce" +
-               "&tr=udp://tracker.pirateparty.gr:6969/announce" +
-               "&tr=udp://tracker.cyberia.is:6969/announce" +
-               "&tr=udp://open.demonii.com:1337/announce" +
-               "&tr=udp://tracker.zer0day.to:1337/announce" +
-               "&tr=udp://p4p.arenabg.com:1337/announce";
+               "&tr=udp://tracker.opentrackr.org:1337/announce" +
+               "&tr=udp://open.stealth.si:80/announce" +
+               "&tr=udp://explodie.org:6969/announce" +
+               "&tr=udp://tracker.torrent.eu.org:451/announce" +
+               "&tr=udp://open.demonoid.ch:6969/announce" +
+               "&tr=udp://tracker.qu.ax:6969/announce" +
+               "&tr=udp://tracker.plx.im:6969/announce" +
+               "&tr=udp://wepzone.net:6969/announce";
     }
 
     private int? ExtractYearFromTitle(string title)

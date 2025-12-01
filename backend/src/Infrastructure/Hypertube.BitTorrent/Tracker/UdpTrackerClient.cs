@@ -323,7 +323,7 @@ public class UdpTrackerClient : ITrackerClient, IDisposable
     /// Envoie une requête avec retry logic (exponential backoff)
     /// Timeout: 5 × 2^n secondes (n = 0)
     /// </summary>
-    private async Task<byte[]> SendWithRetryAsync(byte[] request, UdpClient udpClient, IPEndPoint endpoint, int maxRetries = 0)
+    private async Task<byte[]> SendWithRetryAsync(byte[] request, UdpClient udpClient, IPEndPoint endpoint, int maxRetries = 2)
     {
         // Console.WriteLine($"[UDP.SendRetry] START - endpoint={endpoint}, maxRetries={maxRetries}");  // TOO VERBOSE
 

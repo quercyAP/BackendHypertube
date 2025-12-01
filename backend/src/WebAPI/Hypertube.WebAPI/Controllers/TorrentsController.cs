@@ -148,7 +148,7 @@ public class TorrentsController : ControllerBase
         if (string.IsNullOrEmpty(rangeHeader))
         {
             // No range requested, return entire file
-            var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
             return File(stream, "video/mp4", enableRangeProcessing: true);
         }
 
@@ -168,7 +168,7 @@ public class TorrentsController : ControllerBase
         var contentLength = end - start + 1;
 
         // Open file stream and seek to start position
-        var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         fileStream.Seek(start, SeekOrigin.Begin);
 
         // Set response headers for partial content

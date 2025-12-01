@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Text.Json;
 using Hypertube.Application.Common.Services;
 using Hypertube.Application.Movies.DTOs;
 using Hypertube.Application.Movies.Services;
@@ -310,6 +311,41 @@ public class TorrentDownloadService : ITorrentDownloadService
     {
         var videoExtensions = new[] { ".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm" };
 
+        // 1) STRATÉGIE PRINCIPALE: scanner le dossier de téléchargement et retourner
+        //    le plus gros fichier vidéo réellement présent sur disque.
+        if (Directory.Exists(downloadInfo.DownloadPath))
+        {
+            // 1.a) D'abord, essayer les fichiers avec extension vidéo connue
+            var videoFiles = Directory.EnumerateFiles(downloadInfo.DownloadPath, "*", SearchOption.AllDirectories)
+                .Where(path => videoExtensions.Any(ext => path.EndsWith(ext, StringComparison.OrdinalIgnoreCase)))
+                .Select(path => new FileInfo(path))
+                .Where(fi => fi.Exists)
+                .OrderByDescending(fi => fi.Length)
+                .ToList();
+
+            var largestVideoOnDisk = videoFiles.FirstOrDefault();
+            if (largestVideoOnDisk != null)
+            {
+                return largestVideoOnDisk.FullName;
+            }
+
+            // 1.b) Si aucun fichier avec extension vidéo connue, prendre le plus gros
+            //      fichier tout court (cas des torrents sans extension dans Info.Name).
+            var allFiles = Directory.EnumerateFiles(downloadInfo.DownloadPath, "*", SearchOption.AllDirectories)
+                .Select(path => new FileInfo(path))
+                .Where(fi => fi.Exists)
+                .OrderByDescending(fi => fi.Length)
+                .ToList();
+
+            var largestAnyOnDisk = allFiles.FirstOrDefault();
+            if (largestAnyOnDisk != null)
+            {
+                return largestAnyOnDisk.FullName;
+            }
+        }
+
+        // 2) Fallback: logique multi-fichiers basée sur Info.Files (pour une future prise en
+        //    charge plus fine du layout multi-file).
         var largestFile = downloadInfo.TorrentFile.Info.Files?
             .Where(f => videoExtensions.Any(ext => f.FullPath.EndsWith(ext, StringComparison.OrdinalIgnoreCase)))
             .OrderByDescending(f => f.Length)
@@ -320,7 +356,7 @@ public class TorrentDownloadService : ITorrentDownloadService
             return Path.Combine(downloadInfo.DownloadPath, largestFile.FullPath);
         }
 
-        // Single file torrent
+        // 3) Fallback: single file torrent avec extension explicite dans Name
         if (videoExtensions.Any(ext => downloadInfo.TorrentFile.Info.Name.EndsWith(ext, StringComparison.OrdinalIgnoreCase)))
         {
             return Path.Combine(downloadInfo.DownloadPath, downloadInfo.TorrentFile.Info.Name);

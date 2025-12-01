@@ -7,28 +7,26 @@ public class TorrentFileWriter : IDisposable
 {
     private readonly SafeFileHandle _fileHandle;
     private readonly TorrentInfo _torrentInfo;
-    private readonly string _downloadPath;
+    private readonly string _filePath;
     private bool _disposed;
 
-    public TorrentFileWriter(string downloadPath, TorrentInfo torrentInfo)
+    public TorrentFileWriter(string downloadDirectory, TorrentInfo torrentInfo)
     {
-        if (string.IsNullOrWhiteSpace(downloadPath))
-            throw new ArgumentException("Download path cannot be null or empty", nameof(downloadPath));
+        if (string.IsNullOrWhiteSpace(downloadDirectory))
+            throw new ArgumentException("Download directory cannot be null or empty", nameof(downloadDirectory));
 
-        _downloadPath = downloadPath ?? throw new ArgumentNullException(nameof(downloadPath));
         _torrentInfo = torrentInfo ?? throw new ArgumentNullException(nameof(torrentInfo));
 
-        var directory = Path.GetDirectoryName(downloadPath);
-        if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
-        {
-            Directory.CreateDirectory(directory);
-        }
+        Directory.CreateDirectory(downloadDirectory);
+
+        // Store single-file torrents using the original name under the directory provided.
+        _filePath = Path.Combine(downloadDirectory, torrentInfo.Name);
 
         var fileStream = new FileStream(
-            downloadPath,
+            _filePath,
             FileMode.Create,
             FileAccess.ReadWrite,
-            FileShare.None,
+            FileShare.ReadWrite,
             bufferSize: 1024 * 1024
         );
 
@@ -114,7 +112,7 @@ public class TorrentFileWriter : IDisposable
         return remainder > 0 ? remainder : _torrentInfo.PieceLength;
     }
 
-    public string DownloadPath => _downloadPath;
+    public string FilePath => _filePath;
 
     public void Dispose()
     {
