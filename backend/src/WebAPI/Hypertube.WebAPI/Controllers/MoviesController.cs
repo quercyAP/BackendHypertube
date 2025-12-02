@@ -75,6 +75,59 @@ public class MoviesController : ControllerBase
     }
 
     /// <summary>
+    /// Get movies with active torrents, sorted by seeders (torrent activity)
+    /// </summary>
+    [HttpGet("active")]
+    public async Task<IActionResult> GetMoviesWithActiveTorrents(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
+    {
+        if (page < 1) page = 1;
+        if (pageSize < 1 || pageSize > 100) pageSize = 20;
+
+        // Directly query torrent sources for popular items, then sort by seeders
+        var (results, totalCount) = await _torrentSearchService.GetPopularAsync(page, pageSize, cancellationToken);
+
+        // Reorder by seeders to emphasize torrent activity
+        var sortedBySeeds = results
+            .OrderByDescending(r => r.Seeds ?? 0)
+            .ToList();
+
+        var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+
+        // Shape the response to expose both movie metadata and best torrent info
+        var movies = sortedBySeeds.Select(r => new
+        {
+            imdbId = r.ImdbId,
+            title = r.Title,
+            year = r.Year,
+            rating = r.Rating,
+            genre = r.Genre,
+            coverImageUrl = r.CoverImageUrl,
+            bestTorrent = new
+            {
+                quality = r.Quality,
+                magnetLink = r.MagnetLink,
+                torrentUrl = r.TorrentUrl,
+                size = r.Size,
+                seeds = r.Seeds,
+                peers = r.Peers,
+                source = r.Source
+            }
+        });
+
+        return Ok(new
+        {
+            movies,
+            totalPages,
+            currentPage = page,
+            totalCount,
+            hasMore = page < totalPages
+        });
+    }
+
+    /// <summary>
     /// Search movies by title
     /// </summary>
     [HttpGet("search")]

@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Hypertube – Minimal Player</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; padding: 1.5rem; background: #0f172a; color: #e5e7eb; }
+      h1 { font-size: 1.5rem; margin-bottom: 1rem; }
+      .layout { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 1.5rem; align-items: flex-start; }
+      .card { background: #020617; border-radius: 0.75rem; padding: 1rem 1.25rem; border: 1px solid #1f2937; box-shadow: 0 10px 40px rgba(0,0,0,0.6); }
+      label { font-size: 0.8rem; text-transform: uppercase; letter-spacing: .06em; color: #9ca3af; display: block; margin-bottom: 0.25rem; }
+      input { width: 100%; padding: 0.4rem 0.6rem; border-radius: 0.4rem; border: 1px solid #4b5563; background: #020617; color: #e5e7eb; font-size: 0.85rem; }
+      input:focus { outline: 2px solid #38bdf8; outline-offset: 1px; border-color: #38bdf8; }
+      button { border-radius: 999px; border: none; padding: 0.35rem 0.9rem; font-size: 0.8rem; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 0.35rem; }
+      button.primary { background: linear-gradient(135deg,#38bdf8,#0ea5e9); color: #0b1120; }
+      button.secondary { background: #020617; color: #e5e7eb; border: 1px solid #4b5563; }
+      button:disabled { opacity: 0.5; cursor: default; }
+      table { width: 100%; border-collapse: collapse; margin-top: 0.75rem; font-size: 0.8rem; }
+      th, td { padding: 0.35rem 0.4rem; text-align: left; }
+      th { font-weight: 500; color: #9ca3af; border-bottom: 1px solid #111827; }
+      tr:nth-child(even) td { background: #020617; }
+      .badge { border-radius: 999px; padding: 0.05rem 0.55rem; font-size: 0.7rem; border: 1px solid rgba(148,163,184,.3); }
+      .badge.green { background: rgba(34,197,94,.1); border-color: rgba(34,197,94,.5); color: #a7f3d0; }
+      .badge.amber { background: rgba(245,158,11,.1); border-color: rgba(245,158,11,.5); color: #fed7aa; }
+      .badge.red { background: rgba(248,113,113,.1); border-color: rgba(248,113,113,.5); color: #fecaca; }
+      .badge.blue { background: rgba(59,130,246,.12); border-color: rgba(59,130,246,.6); color: #bfdbfe; }
+      .progress-outer { width: 100%; height: 0.3rem; border-radius: 999px; background: #020617; overflow: hidden; }
+      .progress-inner { height: 100%; background: linear-gradient(90deg,#22c55e,#a3e635); }
+      .toolbar { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-end; margin-bottom: 0.5rem; }
+      .toolbar-right { margin-left: auto; display: flex; gap: 0.5rem; align-items: center; }
+      .small { font-size: 0.8rem; color: #9ca3af; }
+      video { width: 100%; border-radius: 0.75rem; background: #020617; border: 1px solid #111827; max-height: 60vh; }
+      .player-meta { margin-top: 0.6rem; font-size: 0.85rem; display: grid; grid-template-columns: 1.5fr 1fr; gap: 0.5rem; align-items: center; }
+      .pill { border-radius: 999px; padding: 0.1rem 0.6rem; background: #020617; border: 1px solid #111827; font-size: 0.75rem; color: #9ca3af; }
+      .muted { color: #6b7280; }
+      @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <h1>Hypertube – Minimal Player</h1>
+    <div class="layout">
+      <section class="card" id="list-card">
+        <div class="toolbar">
+          <div style="flex:1 1 240px; min-width: 0;">
+            <label for="token-input">JWT Bearer token</label>
+            <input id="token-input" type="text" placeholder="Paste your JWT here (from Swagger / login)" autocomplete="off" />
+          </div>
+          <div class="toolbar-right">
+            <button class="secondary" id="save-token-btn">Save token</button>
+            <button class="primary" id="load-btn">Load torrents</button>
+          </div>
+        </div>
+        <div class="small">Token is kept in <code>localStorage</code> on this browser only.</div>
+        <div id="list-state" class="small" style="margin-top:0.4rem;">Idle.</div>
+        <table id="torrent-table">
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th style="width:110px;">Progress</th>
+              <th>Status</th>
+              <th style="width:90px;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="torrent-tbody">
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <video id="video" controls preload="metadata"></video>
+        <div class="player-meta">
+          <div>
+            <div id="player-title" class="small muted">No torrent selected.</div>
+            <div id="player-status" class="small" style="margin-top:0.2rem;"></div>
+          </div>
+          <div style="text-align:right;">
+            <span id="player-extra" class="pill muted">–</span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      const API_BASE = ""; // same origin as API (reverse-proxy / docker-compose)
+
+      const tokenInput = document.getElementById("token-input");
+      const saveTokenBtn = document.getElementById("save-token-btn");
+      const loadBtn = document.getElementById("load-btn");
+      const listState = document.getElementById("list-state");
+      const tbody = document.getElementById("torrent-tbody");
+      const videoEl = document.getElementById("video");
+      const playerTitle = document.getElementById("player-title");
+      const playerStatus = document.getElementById("player-status");
+      const playerExtra = document.getElementById("player-extra");
+
+      function getToken() {
+        return localStorage.getItem("hypertube_jwt") || "";
+      }
+
+      function setToken(value) {
+        localStorage.setItem("hypertube_jwt", value || "");
+      }
+
+      function initToken() {
+        const stored = getToken();
+        if (stored) {
+          tokenInput.value = stored;
+        }
+      }
+
+      function status(text, isError) {
+        listState.textContent = text;
+        listState.style.color = isError ? "#fecaca" : "#9ca3af";
+      }
+
+      async function fetchJson(path) {
+        const token = tokenInput.value.trim();
+        if (!token) {
+          throw new Error("Token is empty – paste a JWT first.");
+        }
+
+        const res = await fetch(API_BASE + path, {
+          headers: {
+            "Authorization": "Bearer " + token,
+          },
+        });
+
+        if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          throw new Error(`HTTP ${res.status} – ${text}`);
+        }
+
+        return res.json();
+      }
+
+      function renderRows(downloads) {
+        tbody.innerHTML = "";
+
+        for (const d of downloads) {
+          const tr = document.createElement("tr");
+
+          const titleTd = document.createElement("td");
+          titleTd.textContent = d.movieTitle || "(no title)";
+
+          const progTd = document.createElement("td");
+          const progOuter = document.createElement("div");
+          progOuter.className = "progress-outer";
+          const progInner = document.createElement("div");
+          progInner.className = "progress-inner";
+          const pct = Math.max(0, Math.min(100, d.progress || 0));
+          progInner.style.width = pct + "%";
+          progOuter.appendChild(progInner);
+          const progLabel = document.createElement("div");
+          progLabel.className = "small";
+          progLabel.textContent = pct.toFixed(1) + "%";
+          progTd.appendChild(progOuter);
+          progTd.appendChild(progLabel);
+
+          const statusTd = document.createElement("td");
+          const badge = document.createElement("span");
+          badge.className = "badge";
+          const statusText = d.status || (d.isComplete ? "Completed" : "Downloading");
+          const lower = statusText.toLowerCase();
+          if (lower.includes("completed") || lower.includes("seeding")) {
+            badge.classList.add("green");
+          } else if (lower.includes("remux")) {
+            badge.classList.add("blue");
+          } else if (lower.includes("incompatible")) {
+            badge.classList.add("red");
+          } else if (lower.includes("codecunknown") || lower.includes("error")) {
+            badge.classList.add("amber");
+          } else {
+            badge.classList.add("amber");
+          }
+          badge.textContent = statusText;
+          statusTd.appendChild(badge);
+
+          const actionsTd = document.createElement("td");
+          const playBtn = document.createElement("button");
+          playBtn.className = "primary";
+          playBtn.textContent = "Play";
+
+          const s = (d.status || "").toLowerCase();
+          const incompatible = s.includes("incompatible");
+          const codecUnknown = s.includes("codecunknown");
+          const remuxing = s.includes("remux");
+
+          // Disable play if backend marked the file as incompatible
+          // For CodecUnknown we allow trying, but indicate possible failure in the player.
+          playBtn.disabled = incompatible || (!d.isReadyForStreaming && !d.isComplete && !remuxing);
+          playBtn.addEventListener("click", () => {
+            playTorrent(d);
+          });
+          actionsTd.appendChild(playBtn);
+
+          tr.appendChild(titleTd);
+          tr.appendChild(progTd);
+          tr.appendChild(statusTd);
+          tr.appendChild(actionsTd);
+
+          tbody.appendChild(tr);
+        }
+      }
+
+      async function loadTorrents() {
+        try {
+          status("Loading torrents…", false);
+          const data = await fetchJson("/api/torrents");
+          const downloads = Array.isArray(data.downloads) ? data.downloads : [];
+          renderRows(downloads);
+          status(`Loaded ${downloads.length} torrent(s).`, false);
+        } catch (err) {
+          console.error(err);
+          status(err.message || String(err), true);
+        }
+      }
+
+      function playTorrent(d) {
+        const token = tokenInput.value.trim();
+        if (!token) {
+          status("Token is empty – paste a JWT first.", true);
+          return;
+        }
+
+        const id = d.torrentId || d.id;
+        if (!id) {
+          status("Missing torrent id.", true);
+          return;
+        }
+
+        const src = `${API_BASE}/api/torrents/${id}/stream?access_token=${encodeURIComponent(token)}`;
+        videoEl.src = src;
+        videoEl.currentTime = 0;
+        videoEl.play().catch(() => {});
+
+        playerTitle.textContent = d.movieTitle || "(no title)";
+        const statusText = d.status || (d.isComplete ? "Completed" : "Downloading");
+        playerStatus.textContent = `${(d.progress || 0).toFixed(1)}% – ${statusText}`;
+
+        const lower = (statusText || "").toLowerCase();
+        if (lower.includes("remux")) {
+          playerExtra.textContent = "Remuxing in progress – wait until status is Completed/Seeding.";
+          playerExtra.classList.remove("muted");
+        } else if (lower.includes("incompatible")) {
+          playerExtra.textContent = "Marked incompatible – playback is not available.";
+          playerExtra.classList.remove("muted");
+        } else if (lower.includes("codecunknown")) {
+          playerExtra.textContent = "Codec unknown – playback may or may not work in your browser.";
+          playerExtra.classList.remove("muted");
+        } else {
+          playerExtra.textContent = d.canStreamNow ? "Streamable" : "May not be streamable";
+          playerExtra.classList.remove("muted");
+        }
+      }
+
+      saveTokenBtn.addEventListener("click", () => {
+        const val = tokenInput.value.trim();
+        setToken(val);
+        status("Token saved locally.", false);
+      });
+
+      loadBtn.addEventListener("click", () => {
+        loadTorrents();
+      });
+
+      initToken();
+      if (tokenInput.value.trim()) {
+        status("Token loaded from localStorage. Click \"Load torrents\".", false);
+      } else {
+        status("Paste a JWT token then click \"Load torrents\".", false);
+      }
+    </script>
+  </body>
+</html>

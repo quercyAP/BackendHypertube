@@ -103,6 +103,22 @@ public class PirateBayService
 
             var lowerName = torrent.Name.ToLowerInvariant();
 
+            // Skip known HEVC/x265 encodes to prefer x264/H.264 content for streaming compatibility
+            if (lowerName.Contains("x265") || lowerName.Contains("hevc"))
+                continue;
+
+            // Skip typical old/low-quality or incompatible encodes that are unlikely to be browser-playable
+            // e.g. Xvid/DivX in AVI, DVDScr/CAM/TS releases
+            if (lowerName.Contains("xvid") ||
+                lowerName.Contains("divx") ||
+                lowerName.Contains("dvdscr") ||
+                lowerName.Contains("cam") ||
+                lowerName.Contains("telesync") ||
+                lowerName.Contains("ts"))
+            {
+                continue;
+            }
+
             // Skip collections, packs, and series
             if (lowerName.Contains("pack") ||
                 lowerName.Contains("collection") ||

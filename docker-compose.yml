@@ -82,8 +82,11 @@ services:
     networks:
       - hypertube-net
     command: >
-      sh -c "dotnet restore &&
-             cd src/WebAPI/Hypertube.WebAPI &&
+      sh -c "apt-get update && \
+             apt-get install -y ffmpeg && \
+             rm -rf /var/lib/apt/lists/* && \
+             dotnet restore && \
+             cd src/WebAPI/Hypertube.WebAPI && \
              dotnet watch run --no-restore --urls http://0.0.0.0:5000"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/api/v1/health"]

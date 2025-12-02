@@ -90,6 +90,20 @@ try
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
             ClockSkew = TimeSpan.Zero
         };
+
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                if (!string.IsNullOrEmpty(accessToken))
+                {
+                    context.Token = accessToken;
+                }
+
+                return Task.CompletedTask;
+            }
+        };
     })
     .AddGoogle(options =>
     {
@@ -233,6 +247,9 @@ try
     // CORS
     app.UseCors("AllowFrontend");
 
+    app.UseDefaultFiles();
+    app.UseStaticFiles();
+
     // Static files for uploads
     var uploadsPath = Path.Combine(Directory.GetCurrentDirectory(), "uploads");
     if (!Directory.Exists(uploadsPath))
@@ -253,14 +270,14 @@ try
     // Map Controllers
     app.MapControllers();
 
-    // Root endpoint
-    app.MapGet("/", () => new
+    // Status endpoint (moved off '/')
+    app.MapGet("/status", () => new
     {
         service = "Hypertube API",
         version = "1.0",
         status = "running",
         swagger = "/swagger"
-    }).WithName("Root").WithOpenApi();
+    }).WithName("Status").WithOpenApi();
 
     Log.Information("Hypertube API started successfully on port 5000");
     app.Run();

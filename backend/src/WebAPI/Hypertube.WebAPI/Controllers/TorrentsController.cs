@@ -141,47 +141,12 @@ public class TorrentsController : ControllerBase
         }
 
         var fileInfo = new FileInfo(filePath);
-        var fileSize = fileInfo.Length;
+        _logger.LogInformation("Streaming video file with automatic range processing: {FilePath} (size: {Size} bytes)",
+            filePath, fileInfo.Length);
 
-        // Parse Range header
-        var rangeHeader = Request.Headers["Range"].ToString();
-        if (string.IsNullOrEmpty(rangeHeader))
-        {
-            // No range requested, return entire file
-            var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-            return File(stream, "video/mp4", enableRangeProcessing: true);
-        }
-
-        // Parse Range: bytes=start-end
-        var range = rangeHeader.Replace("bytes=", "").Split('-');
-        var start = long.Parse(range[0]);
-        var end = range.Length > 1 && !string.IsNullOrEmpty(range[1])
-            ? long.Parse(range[1])
-            : fileSize - 1;
-
-        // Validate range
-        if (start >= fileSize || end >= fileSize)
-        {
-            return StatusCode(416, new { message = "Requested range not satisfiable" });
-        }
-
-        var contentLength = end - start + 1;
-
-        // Open file stream and seek to start position
-        var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-        fileStream.Seek(start, SeekOrigin.Begin);
-
-        // Set response headers for partial content
-        Response.StatusCode = 206; // Partial Content
-        Response.Headers.Add("Accept-Ranges", "bytes");
-        Response.Headers.Add("Content-Range", $"bytes {start}-{end}/{fileSize}");
-        Response.Headers.Add("Content-Length", contentLength.ToString());
-        Response.ContentType = "video/mp4";
-
-        _logger.LogInformation("Streaming video range: {Start}-{End}/{FileSize}", start, end, fileSize);
-
-        // Return limited stream
-        return File(fileStream, "video/mp4");
+        // Let ASP.NET Core handle Range headers and partial content automatically
+        var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        return File(stream, "video/mp4", enableRangeProcessing: true);
     }
 }
 

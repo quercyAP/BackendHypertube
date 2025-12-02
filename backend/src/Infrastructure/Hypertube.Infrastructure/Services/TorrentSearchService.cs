@@ -48,11 +48,17 @@ public class TorrentSearchService : ITorrentSearchService
         // Deduplicate by IMDb ID and title
         var deduplicatedResults = DeduplicateResults(allResults);
 
-        // Get total count before pagination
-        var totalCount = deduplicatedResults.Count;
+        // Apply a global minimum seeders threshold to keep only reasonably active torrents
+        const int minSeeds = 5;
+        var filteredResults = deduplicatedResults
+            .Where(r => (r.Seeds ?? 0) >= minSeeds)
+            .ToList();
+
+        // Get total count before pagination (after filtering by seeds)
+        var totalCount = filteredResults.Count;
 
         // Sort by seeds descending, then rating, then paginate
-        var sortedResults = deduplicatedResults
+        var sortedResults = filteredResults
             .OrderByDescending(r => r.Seeds ?? 0)
             .ThenByDescending(r => r.Rating ?? 0)
             .Skip((page - 1) * limit)
@@ -94,11 +100,17 @@ public class TorrentSearchService : ITorrentSearchService
         // Deduplicate
         var deduplicatedResults = DeduplicateResults(allResults);
 
-        // Get total count before pagination
-        var totalCount = deduplicatedResults.Count;
+        // Apply a global minimum seeders threshold to keep only reasonably active torrents
+        const int minSeeds = 5;
+        var filteredResults = deduplicatedResults
+            .Where(r => (r.Seeds ?? 0) >= minSeeds)
+            .ToList();
+
+        // Get total count before pagination (after filtering by seeds)
+        var totalCount = filteredResults.Count;
 
         // Sort by rating and seeds, then paginate
-        var sortedResults = deduplicatedResults
+        var sortedResults = filteredResults
             .OrderByDescending(r => r.Rating ?? 0)
             .ThenByDescending(r => r.Seeds ?? 0)
             .Skip((page - 1) * limit)

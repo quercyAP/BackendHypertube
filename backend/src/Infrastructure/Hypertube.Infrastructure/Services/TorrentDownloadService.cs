@@ -34,6 +34,8 @@ public class TorrentDownloadService : ITorrentDownloadService
 
         // Create download directory if it doesn't exist
         Directory.CreateDirectory(_downloadDirectory);
+
+        LoadPersistedTorrents();
     }
 
     public async Task<Guid> StartDownloadAsync(string torrentUrl, string movieTitle, CancellationToken cancellationToken = default)
@@ -92,6 +94,17 @@ public class TorrentDownloadService : ITorrentDownloadService
 
                         // Start conversion if needed
                         await StartConversionIfNeededAsync(torrentId);
+
+                        downloadInfo.CompletedAt = DateTime.UtcNow;
+
+                        try
+                        {
+                            await SaveTorrentMetadataAsync(downloadInfo);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "Failed to persist torrent metadata for {TorrentId}", torrentId);
+                        }
                     }
                     else
                     {
@@ -133,8 +146,31 @@ public class TorrentDownloadService : ITorrentDownloadService
             return Task.FromResult<TorrentDownloadProgressDto?>(null);
         }
 
-        var filePath = downloadInfo.ConvertedFilePath ?? GetLargestVideoFilePath(downloadInfo);
+        var filePath = downloadInfo.ConvertedFilePath ?? downloadInfo.PersistedFilePath ?? GetLargestVideoFilePath(downloadInfo);
         var fileFormat = GetFileFormat(filePath);
+
+        if (downloadInfo.DownloadManager == null)
+        {
+            var reloadedProgress = new TorrentDownloadProgressDto
+            {
+                TorrentId = torrentId,
+                MovieTitle = downloadInfo.MovieTitle,
+                Progress = 100.0,
+                DownloadSpeed = 0,
+                IsComplete = true,
+                IsReadyForStreaming = filePath != null,
+                FilePath = filePath,
+                StartedAt = downloadInfo.StartedAt,
+                Status = downloadInfo.Status ?? "Completed",
+                IsConverting = downloadInfo.IsConverting,
+                ConversionProgress = downloadInfo.ConversionProgress,
+                FileFormat = fileFormat,
+                CanStreamNow = CanStreamFormat(fileFormat)
+            };
+
+            return Task.FromResult<TorrentDownloadProgressDto?>(reloadedProgress);
+        }
+
         var canStreamNow = CanStreamFormat(fileFormat) && downloadInfo.DownloadManager.Progress > 5.0;
 
         var progress = new TorrentDownloadProgressDto
@@ -161,8 +197,29 @@ public class TorrentDownloadService : ITorrentDownloadService
     {
         var progressList = _activeDownloads.Values.Select(downloadInfo =>
         {
-            var filePath = downloadInfo.ConvertedFilePath ?? GetLargestVideoFilePath(downloadInfo);
+            var filePath = downloadInfo.ConvertedFilePath ?? downloadInfo.PersistedFilePath ?? GetLargestVideoFilePath(downloadInfo);
             var fileFormat = GetFileFormat(filePath);
+
+            if (downloadInfo.DownloadManager == null)
+            {
+                return new TorrentDownloadProgressDto
+                {
+                    TorrentId = downloadInfo.Id,
+                    MovieTitle = downloadInfo.MovieTitle,
+                    Progress = 100.0,
+                    DownloadSpeed = 0,
+                    IsComplete = true,
+                    IsReadyForStreaming = filePath != null,
+                    FilePath = filePath,
+                    StartedAt = downloadInfo.StartedAt,
+                    Status = downloadInfo.Status ?? "Completed",
+                    IsConverting = downloadInfo.IsConverting,
+                    ConversionProgress = downloadInfo.ConversionProgress,
+                    FileFormat = fileFormat,
+                    CanStreamNow = CanStreamFormat(fileFormat)
+                };
+            }
+
             var canStreamNow = CanStreamFormat(fileFormat) && downloadInfo.DownloadManager.Progress > 5.0;
 
             return new TorrentDownloadProgressDto
@@ -205,7 +262,8 @@ public class TorrentDownloadService : ITorrentDownloadService
             return Task.FromResult<string?>(null);
         }
 
-        return Task.FromResult<string?>(GetLargestVideoFilePath(downloadInfo));
+        var filePath = downloadInfo.ConvertedFilePath ?? downloadInfo.PersistedFilePath ?? GetLargestVideoFilePath(downloadInfo);
+        return Task.FromResult<string?>(filePath);
     }
 
     public Task<bool> IsReadyForStreamingAsync(Guid torrentId, CancellationToken cancellationToken = default)
@@ -213,6 +271,12 @@ public class TorrentDownloadService : ITorrentDownloadService
         if (!_activeDownloads.TryGetValue(torrentId, out var downloadInfo))
         {
             return Task.FromResult(false);
+        }
+
+        if (downloadInfo.DownloadManager == null)
+        {
+            var filePath = downloadInfo.ConvertedFilePath ?? downloadInfo.PersistedFilePath ?? GetLargestVideoFilePath(downloadInfo);
+            return Task.FromResult(filePath != null);
         }
 
         return Task.FromResult(downloadInfo.DownloadManager.Progress > 5.0);
@@ -234,16 +298,7 @@ public class TorrentDownloadService : ITorrentDownloadService
 
         using var scope = _serviceProvider.CreateScope();
 
-        // Check if file is already in web-compatible format (MP4/WebM)
-        var fileFormat = GetFileFormat(videoFilePath);
-        if (CanStreamFormat(fileFormat))
-        {
-            _logger.LogInformation("Video file is already web-compatible: {FilePath} (format: {Format})", videoFilePath, fileFormat);
-            downloadInfo.ConvertedFilePath = videoFilePath;
-            return;
-        }
-
-        // File needs processing (likely MKV) - detect codecs
+        // Always detect codecs with ffprobe to avoid container-only decisions
         _logger.LogInformation("Detecting codecs for: {FilePath}", videoFilePath);
         var codecDetector = scope.ServiceProvider.GetRequiredService<IVideoCodecDetector>();
         var codecInfo = await codecDetector.DetectCodecsAsync(videoFilePath);
@@ -251,8 +306,51 @@ public class TorrentDownloadService : ITorrentDownloadService
         if (codecInfo == null)
         {
             _logger.LogError("Failed to detect codecs for: {FilePath}", videoFilePath);
-            downloadInfo.Status = "Error";
-            downloadInfo.ErrorMessage = "Unable to detect video format";
+            downloadInfo.Status = "CodecUnknown";
+            downloadInfo.ErrorMessage = "Unable to detect video format (ffprobe error)";
+            return;
+        }
+
+        // If codecs + container are already web-compatible, use the original file directly
+        if (codecInfo.IsWebCompatible)
+        {
+            _logger.LogInformation(
+                "Video is web-compatible according to codec detector: {FilePath} (Video={Video}, Audio={Audio}, Container={Container})",
+                videoFilePath, codecInfo.VideoCodec, codecInfo.AudioCodec, codecInfo.ContainerFormat);
+
+            downloadInfo.ConvertedFilePath = videoFilePath;
+            if (string.IsNullOrEmpty(downloadInfo.Status))
+            {
+                downloadInfo.Status = "Seeding";
+            }
+            return;
+        }
+
+        // Special-case: HEVC + AAC — allow testing but warn about limited browser support
+        if (codecInfo.VideoCodec == "hevc" && codecInfo.AudioCodec == "aac")
+        {
+            _logger.LogWarning(
+                "HEVC+AAC detected – treating as CodecUnknown for development/testing: {FilePath} (Container={Container})",
+                videoFilePath, codecInfo.ContainerFormat);
+
+            downloadInfo.ConvertedFilePath = videoFilePath;
+            downloadInfo.Status = "CodecUnknown";
+            downloadInfo.ErrorMessage =
+                "HEVC video – playback may or may not work in this browser. Officially only H.264+AAC is supported.";
+            return;
+        }
+
+        // Special-case: H.264 + MP3 — often playable, but audio support depends on browser/container
+        if (codecInfo.VideoCodec == "h264" && codecInfo.AudioCodec == "mp3")
+        {
+            _logger.LogWarning(
+                "H264+MP3 detected – treating as CodecUnknown for development/testing: {FilePath} (Container={Container})",
+                videoFilePath, codecInfo.ContainerFormat);
+
+            downloadInfo.ConvertedFilePath = videoFilePath;
+            downloadInfo.Status = "CodecUnknown";
+            downloadInfo.ErrorMessage =
+                "H.264 video with MP3 audio – video will likely play, but audio may or may not work depending on the browser and container. Officially only H.264+AAC is fully supported.";
             return;
         }
 
@@ -274,7 +372,7 @@ public class TorrentDownloadService : ITorrentDownloadService
                 var progress = new Progress<double>(percent =>
                 {
                     downloadInfo.ConversionProgress = percent;
-                    _logger.LogDebug("Remux progress: {Percent:F2}%", percent);
+                    _logger.LogDebug("Remux progress: {Percent:F2}%, File={File}", percent, videoFilePath);
                 });
 
                 var remuxService = scope.ServiceProvider.GetRequiredService<IVideoRemuxService>();
@@ -309,6 +407,11 @@ public class TorrentDownloadService : ITorrentDownloadService
 
     private string? GetLargestVideoFilePath(TorrentDownloadInfo downloadInfo)
     {
+        if (!string.IsNullOrEmpty(downloadInfo.PersistedFilePath) && File.Exists(downloadInfo.PersistedFilePath))
+        {
+            return downloadInfo.PersistedFilePath;
+        }
+
         var videoExtensions = new[] { ".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm" };
 
         // 1) STRATÉGIE PRINCIPALE: scanner le dossier de téléchargement et retourner
@@ -393,8 +496,9 @@ public class TorrentDownloadService : ITorrentDownloadService
         public Guid Id { get; set; }
         public string MovieTitle { get; set; } = string.Empty;
         public required BitTorrent.Models.TorrentFile TorrentFile { get; set; }
-        public required TorrentDownloadManager DownloadManager { get; set; }
+        public TorrentDownloadManager? DownloadManager { get; set; }
         public DateTime StartedAt { get; set; }
+        public DateTime? CompletedAt { get; set; }
         public string DownloadPath { get; set; } = string.Empty;
         public string? Status { get; set; }
         public string? ErrorMessage { get; set; }
@@ -404,5 +508,140 @@ public class TorrentDownloadService : ITorrentDownloadService
         public bool IsConverting { get; set; }
         public double ConversionProgress { get; set; }
         public string? ConvertedFilePath { get; set; }
+        public string? PersistedFilePath { get; set; }
+    }
+
+    private class PersistedTorrentMetadata
+    {
+        public Guid TorrentId { get; set; }
+        public string MovieTitle { get; set; } = string.Empty;
+        public string InfoHash { get; set; } = string.Empty;
+        public string DownloadPath { get; set; } = string.Empty;
+        public string FilePath { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+        public DateTime StartedAt { get; set; }
+        public DateTime? CompletedAt { get; set; }
+        public long? BytesDownloaded { get; set; }
+        public string? OriginalTorrentUrl { get; set; }
+    }
+
+    private static byte[] ParseHexString(string? hex)
+    {
+        if (string.IsNullOrWhiteSpace(hex))
+        {
+            return Array.Empty<byte>();
+        }
+
+        if (hex.Length % 2 != 0)
+        {
+            return Array.Empty<byte>();
+        }
+
+        var bytes = new byte[hex.Length / 2];
+        for (int i = 0; i < bytes.Length; i++)
+        {
+            bytes[i] = Convert.ToByte(hex.Substring(i * 2, 2), 16);
+        }
+
+        return bytes;
+    }
+
+    private async Task SaveTorrentMetadataAsync(TorrentDownloadInfo downloadInfo)
+    {
+        var filePath = downloadInfo.ConvertedFilePath ?? downloadInfo.PersistedFilePath ?? GetLargestVideoFilePath(downloadInfo);
+        if (filePath == null)
+        {
+            return;
+        }
+
+        var metadata = new PersistedTorrentMetadata
+        {
+            TorrentId = downloadInfo.Id,
+            MovieTitle = downloadInfo.MovieTitle,
+            InfoHash = downloadInfo.TorrentFile.InfoHashHex,
+            DownloadPath = downloadInfo.DownloadPath,
+            FilePath = filePath,
+            Status = downloadInfo.Status ?? (downloadInfo.DownloadManager?.IsComplete == true ? "Completed" : "Downloading"),
+            StartedAt = downloadInfo.StartedAt,
+            CompletedAt = downloadInfo.CompletedAt
+        };
+
+        var json = JsonSerializer.Serialize(metadata, new JsonSerializerOptions
+        {
+            WriteIndented = true
+        });
+
+        var jsonPath = Path.Combine(_downloadDirectory, $"{downloadInfo.Id}.json");
+        await File.WriteAllTextAsync(jsonPath, json);
+    }
+
+    private void LoadPersistedTorrents()
+    {
+        try
+        {
+            if (!Directory.Exists(_downloadDirectory))
+            {
+                return;
+            }
+
+            var jsonFiles = Directory.EnumerateFiles(_downloadDirectory, "*.json", SearchOption.TopDirectoryOnly);
+
+            foreach (var jsonFile in jsonFiles)
+            {
+                try
+                {
+                    var json = File.ReadAllText(jsonFile);
+                    var metadata = JsonSerializer.Deserialize<PersistedTorrentMetadata>(json);
+                    if (metadata == null)
+                    {
+                        continue;
+                    }
+
+                    if (string.IsNullOrEmpty(metadata.FilePath) || !File.Exists(metadata.FilePath))
+                    {
+                        continue;
+                    }
+
+                    if (!Guid.TryParse(metadata.TorrentId.ToString(), out var torrentId))
+                    {
+                        continue;
+                    }
+
+                    var torrentInfo = new TorrentDownloadInfo
+                    {
+                        Id = torrentId,
+                        MovieTitle = metadata.MovieTitle,
+                        TorrentFile = new BitTorrent.Models.TorrentFile
+                        {
+                            InfoHash = ParseHexString(metadata.InfoHash),
+                            Info = new BitTorrent.Models.TorrentInfo()
+                        },
+                        DownloadManager = null,
+                        StartedAt = metadata.StartedAt,
+                        CompletedAt = metadata.CompletedAt,
+                        DownloadPath = string.IsNullOrEmpty(metadata.DownloadPath)
+                            ? Path.GetDirectoryName(metadata.FilePath) ?? _downloadDirectory
+                            : metadata.DownloadPath,
+                        Status = string.IsNullOrEmpty(metadata.Status) ? "Completed" : metadata.Status,
+                        ErrorMessage = null,
+                        CancellationTokenSource = null,
+                        IsConverting = false,
+                        ConversionProgress = 100,
+                        ConvertedFilePath = null,
+                        PersistedFilePath = metadata.FilePath
+                    };
+
+                    _activeDownloads[torrentId] = torrentInfo;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to load persisted torrent metadata from {File}", jsonFile);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to enumerate persisted torrents in directory {Directory}", _downloadDirectory);
+        }
     }
 }
