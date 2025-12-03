@@ -154,7 +154,8 @@ POST /comments OR POST /movies/:movie_id/comments
 Expected data : comment, movie_id. Rest is filled by the server.
 During the evaluation, you will be asked to provide evidence that
 your API is truly RESTful.
-7
+
+
 Chapitre IV
 Bonus part
 If the mandatory part is completed perfectly,you can now add any bonus features you
@@ -171,7 +172,8 @@ PERFECT. By perfect, we mean that all mandatory requirement have been
 fully implemented and are functioning without any malfunctioning. If
 any mandatory requirement have not been met, your bonus part will not
 be evaluated.
-8
+
+
 Chapitre V
 Submission and peer-evaluation
 Turn in your assignment in your Gitrepository as usual. Only the work inside your

@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
+using FFMpegCore;
+using FFMpegCore.Enums;
 using Hypertube.Application.Common.Services;
 using Hypertube.Application.Movies.DTOs;
 using Hypertube.Application.Movies.Services;
@@ -49,17 +51,133 @@ public class TorrentDownloadService : ITorrentDownloadService
 
             _logger.LogInformation("Parsing .torrent file ({Size} bytes)", torrentBytes.Length);
 
-            // Parse .torrent file
-            var torrentFile = TorrentFileParser.Parse(torrentBytes);
+            // Parse .torrent file with error handling
+            BitTorrent.Models.TorrentFile torrentFile;
+            try
+            {
+                torrentFile = TorrentFileParser.Parse(torrentBytes);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to parse .torrent file from URL: {TorrentUrl}", torrentUrl);
+                throw new ArgumentException("The downloaded file is not a valid .torrent (invalid or missing 'info' section).", ex);
+            }
 
             _logger.LogInformation("Torrent parsed successfully: InfoHash={InfoHash}, Name={Name}",
                 torrentFile.InfoHashHex, torrentFile.Info.Name);
 
-            // Create download manager
+            var torrentId = Guid.NewGuid();
             var downloadPath = Path.Combine(_downloadDirectory, torrentFile.InfoHashHex);
+
+            // Early validation: ensure there is exactly one video file with a known extension
+            var videoExtensions = new[] { ".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm" };
+
+            var files = torrentFile.Info.Files;
+
+            // Build an explicit list of video files using the same extensions as GetLargestVideoFilePath
+            List<BitTorrent.Models.TorrentFileInfo> videoFiles;
+            if (files != null && files.Any())
+            {
+                videoFiles = files
+                    .Where(f => videoExtensions.Any(ext => f.FullPath.EndsWith(ext, StringComparison.OrdinalIgnoreCase)))
+                    .ToList();
+            }
+            else
+            {
+                videoFiles = new List<BitTorrent.Models.TorrentFileInfo>();
+            }
+
+            // Single-file torrent: if no Files array, rely on Info.Name
+            if (!videoFiles.Any() && (files == null || !files.Any()))
+            {
+                if (videoExtensions.Any(ext => torrentFile.Info.Name.EndsWith(ext, StringComparison.OrdinalIgnoreCase)))
+                {
+                    // Treat Info.Name as the single video file
+                    // No need to store the relative path here; GetLargestVideoFilePath will resolve later.
+                }
+                else
+                {
+                    _logger.LogWarning("Torrent rejected: no video file with known extension (.mp4/.mkv/...) found in metadata: {Name}", torrentFile.Info.Name);
+
+                    var rejectedInfo = new TorrentDownloadInfo
+                    {
+                        Id = torrentId,
+                        MovieTitle = movieTitle,
+                        TorrentFile = torrentFile,
+                        DownloadManager = null,
+                        StartedAt = DateTime.UtcNow,
+                        DownloadPath = downloadPath,
+                        CancellationTokenSource = null,
+                        Status = "Incompatible",
+                        ErrorMessage = "Torrent does not contain a direct video file (.mp4/.mkv/etc.). Archives or multi-file layouts are not supported for this project.",
+                        IsConverting = false,
+                        ConversionProgress = 0,
+                        ConvertedFilePath = null,
+                        PersistedFilePath = null
+                    };
+
+                    _activeDownloads[torrentId] = rejectedInfo;
+                    return torrentId;
+                }
+            }
+
+            // Multi-file torrent: require exactly one video file
+            if (files != null && files.Any())
+            {
+                if (!videoFiles.Any())
+                {
+                    _logger.LogWarning("Torrent rejected: multi-file torrent without any video file with known extension: {Name}", torrentFile.Info.Name);
+
+                    var rejectedInfo = new TorrentDownloadInfo
+                    {
+                        Id = torrentId,
+                        MovieTitle = movieTitle,
+                        TorrentFile = torrentFile,
+                        DownloadManager = null,
+                        StartedAt = DateTime.UtcNow,
+                        DownloadPath = downloadPath,
+                        CancellationTokenSource = null,
+                        Status = "Incompatible",
+                        ErrorMessage = "Multi-file torrent without any .mp4/.mkv/etc. video file is not supported.",
+                        IsConverting = false,
+                        ConversionProgress = 0,
+                        ConvertedFilePath = null,
+                        PersistedFilePath = null
+                    };
+
+                    _activeDownloads[torrentId] = rejectedInfo;
+                    return torrentId;
+                }
+
+                if (videoFiles.Count > 1)
+                {
+                    _logger.LogWarning("Torrent rejected: multi-file torrent with more than one video candidate: {Name}", torrentFile.Info.Name);
+
+                    var rejectedInfo = new TorrentDownloadInfo
+                    {
+                        Id = torrentId,
+                        MovieTitle = movieTitle,
+                        TorrentFile = torrentFile,
+                        DownloadManager = null,
+                        StartedAt = DateTime.UtcNow,
+                        DownloadPath = downloadPath,
+                        CancellationTokenSource = null,
+                        Status = "Incompatible",
+                        ErrorMessage = "Multi-video torrents (packs, discs, etc.) are not supported. Expected a single movie file.",
+                        IsConverting = false,
+                        ConversionProgress = 0,
+                        ConvertedFilePath = null,
+                        PersistedFilePath = null
+                    };
+
+                    _activeDownloads[torrentId] = rejectedInfo;
+                    return torrentId;
+                }
+            }
+
+            // Create download manager for a valid, single-video torrent
             var downloadManager = new TorrentDownloadManager(torrentFile, downloadPath);
 
-            var torrentId = Guid.NewGuid();
             var cts = new CancellationTokenSource();
             var downloadInfo = new TorrentDownloadInfo
             {
@@ -248,7 +366,7 @@ public class TorrentDownloadService : ITorrentDownloadService
         if (_activeDownloads.TryRemove(torrentId, out var downloadInfo))
         {
             downloadInfo.CancellationTokenSource?.Cancel();
-            downloadInfo.DownloadManager.Dispose();
+            downloadInfo.DownloadManager?.Dispose();
             _logger.LogInformation("Stopped torrent download: {MovieTitle}", downloadInfo.MovieTitle);
         }
 
@@ -292,7 +410,10 @@ public class TorrentDownloadService : ITorrentDownloadService
         var videoFilePath = GetLargestVideoFilePath(downloadInfo);
         if (string.IsNullOrEmpty(videoFilePath) || !File.Exists(videoFilePath))
         {
-            _logger.LogWarning("No video file found for processing: {TorrentId}", torrentId);
+            _logger.LogWarning("No valid video file with a known extension found for processing: {TorrentId}", torrentId);
+            downloadInfo.Status = "CodecUnknown";
+            downloadInfo.ErrorMessage =
+                "Unable to locate a valid video file in this torrent (no .mp4/.mkv/etc. found). Archives or extension-less data are not supported.";
             return;
         }
 
@@ -340,20 +461,6 @@ public class TorrentDownloadService : ITorrentDownloadService
             return;
         }
 
-        // Special-case: H.264 + MP3 — often playable, but audio support depends on browser/container
-        if (codecInfo.VideoCodec == "h264" && codecInfo.AudioCodec == "mp3")
-        {
-            _logger.LogWarning(
-                "H264+MP3 detected – treating as CodecUnknown for development/testing: {FilePath} (Container={Container})",
-                videoFilePath, codecInfo.ContainerFormat);
-
-            downloadInfo.ConvertedFilePath = videoFilePath;
-            downloadInfo.Status = "CodecUnknown";
-            downloadInfo.ErrorMessage =
-                "H.264 video with MP3 audio – video will likely play, but audio may or may not work depending on the browser and container. Officially only H.264+AAC is fully supported.";
-            return;
-        }
-
         // Check if file can be fast-remuxed (H.264 + AAC)
         if (codecInfo.VideoCodec == "h264" && codecInfo.AudioCodec == "aac")
         {
@@ -392,17 +499,65 @@ public class TorrentDownloadService : ITorrentDownloadService
                 downloadInfo.Status = "Error";
                 downloadInfo.ErrorMessage = $"Processing failed: {ex.Message}";
             }
-        }
-        else
-        {
-            // Incompatible codecs - cannot stream
-            _logger.LogWarning(
-                "Video has incompatible codecs for streaming - Video: {VideoCodec}, Audio: {AudioCodec}",
-                codecInfo.VideoCodec, codecInfo.AudioCodec);
 
-            downloadInfo.Status = "Incompatible";
-            downloadInfo.ErrorMessage = $"Video format not supported for streaming (Video: {codecInfo.VideoCodec}, Audio: {codecInfo.AudioCodec}). Only H.264+AAC videos can be streamed.";
+            return;
         }
+
+        // H.264 video with non-AAC audio: transcode audio only to AAC in MP4 container
+        if (codecInfo.VideoCodec == "h264" && !string.IsNullOrEmpty(codecInfo.AudioCodec) && codecInfo.AudioCodec != "aac")
+        {
+            var outputPath = Path.Combine(Path.GetDirectoryName(videoFilePath)!,
+                Path.GetFileNameWithoutExtension(videoFilePath) + "_audioaac.mp4");
+
+            downloadInfo.IsConverting = true;
+            downloadInfo.ConversionProgress = 0;
+            downloadInfo.Status = "TranscodingAudio";
+
+            _logger.LogInformation(
+                "Starting audio-only transcode to AAC (H.264 video copy): {InputPath} -> {OutputPath} (Audio={AudioCodec})",
+                videoFilePath, outputPath, codecInfo.AudioCodec);
+
+            try
+            {
+                await FFMpegArguments
+                    .FromFileInput(videoFilePath)
+                    .OutputToFile(outputPath, overwrite: true, options => options
+                        .WithCustomArgument("-c:v copy")
+                        .WithAudioCodec(AudioCodec.Aac)
+                        .WithCustomArgument("-b:a 160k")
+                        .WithCustomArgument("-movflags faststart"))
+                    .NotifyOnProgress(percent =>
+                    {
+                        downloadInfo.ConversionProgress = percent;
+                        _logger.LogDebug("Audio transcode progress: {Percent:F2}%, File={File}", percent, videoFilePath);
+                    }, TimeSpan.FromSeconds(1))
+                    .ProcessAsynchronously();
+
+                downloadInfo.ConvertedFilePath = outputPath;
+                downloadInfo.IsConverting = false;
+                downloadInfo.ConversionProgress = 100;
+                downloadInfo.Status = "Seeding";
+
+                _logger.LogInformation("Audio-only transcode completed: {OutputPath}", outputPath);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Audio-only transcode failed: {InputPath}", videoFilePath);
+                downloadInfo.IsConverting = false;
+                downloadInfo.Status = "Error";
+                downloadInfo.ErrorMessage = $"Audio transcoding failed: {ex.Message}";
+            }
+
+            return;
+        }
+
+        // Incompatible codecs - cannot stream
+        _logger.LogWarning(
+            "Video has incompatible codecs for streaming - Video: {VideoCodec}, Audio: {AudioCodec}",
+            codecInfo.VideoCodec, codecInfo.AudioCodec);
+
+        downloadInfo.Status = "Incompatible";
+        downloadInfo.ErrorMessage = $"Video format not supported for streaming (Video: {codecInfo.VideoCodec}, Audio: {codecInfo.AudioCodec}). Only H.264+AAC videos can be streamed.";
     }
 
     private string? GetLargestVideoFilePath(TorrentDownloadInfo downloadInfo)
@@ -456,15 +611,25 @@ public class TorrentDownloadService : ITorrentDownloadService
 
         if (largestFile != null)
         {
-            return Path.Combine(downloadInfo.DownloadPath, largestFile.FullPath);
+            var candidate = Path.Combine(downloadInfo.DownloadPath, largestFile.FullPath);
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
         }
 
         // 3) Fallback: single file torrent avec extension explicite dans Name
         if (videoExtensions.Any(ext => downloadInfo.TorrentFile.Info.Name.EndsWith(ext, StringComparison.OrdinalIgnoreCase)))
         {
-            return Path.Combine(downloadInfo.DownloadPath, downloadInfo.TorrentFile.Info.Name);
+            var candidate = Path.Combine(downloadInfo.DownloadPath, downloadInfo.TorrentFile.Info.Name);
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
         }
 
+        // Aucun fichier avec extension vidéo connue n'a été trouvé sur disque.
+        // On retourne null pour que l'appelant marque le torrent comme CodecUnknown.
         return null;
     }
 

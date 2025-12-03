@@ -55,6 +55,11 @@ public class TorrentsController : ControllerBase
 
             return Ok(new { torrentId, message = "Download started successfully" });
         }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "Invalid torrent file for: {MovieTitle}", request.MovieTitle);
+            return BadRequest(new { message = ex.Message });
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to start download for: {MovieTitle}", request.MovieTitle);

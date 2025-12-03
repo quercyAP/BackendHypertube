@@ -1,0 +1,15 @@
+"title": "Pirates of Silicon Valley",
+"torrentUrl": "https://itorrents.net/torrent/DA5A9C0A367D08927BB95EAB73CE82F323C4FA79.torrent",
+GOOD
+
+"title": "Amélie",
+"torrentUrl": "https://itorrents.net/torrent/D1C5BD9A2EEC5FE6EBA19E7F663AF3E8D932AB8E.torrent",
+GOOD
+
+"title": "La Haine",
+"torrentUrl": "https://itorrents.net/torrent/B4CADA42F869B6B142B55FD72CD490E29AEE8615.torrent",
+NOOP (Surement un rar ou zip)
+
+"title": "WarGames",
+"torrentUrl": "https://itorrents.net/torrent/36F409600C8744F63FFF8070ECBEA74970C85222.torrent",
+NOOP erreur 500 (Failed to parse BDictionary. Could not parse dictionary value for the key 'info'. There needs to be a value for each key. The dictionary starts at position 0.)

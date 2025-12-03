@@ -83,6 +83,9 @@
 
     <script>
       const API_BASE = ""; // same origin as API (reverse-proxy / docker-compose)
+      // Allow user to try playing torrents marked as Incompatible?
+      // Set to false to strictly block playback for incompatible formats.
+      const ALLOW_INCOMPATIBLE_PLAY = true;
 
       const tokenInput = document.getElementById("token-input");
       const saveTokenBtn = document.getElementById("save-token-btn");
@@ -185,10 +188,14 @@
           const incompatible = s.includes("incompatible");
           const codecUnknown = s.includes("codecunknown");
           const remuxing = s.includes("remux");
+          const transcodingAudio = s.includes("transcodingaudio");
 
-          // Disable play if backend marked the file as incompatible
+          // Disable play if backend marked the file as incompatible (configurable)
+          // Always disable while remuxing or audio transcoding.
           // For CodecUnknown we allow trying, but indicate possible failure in the player.
-          playBtn.disabled = incompatible || (!d.isReadyForStreaming && !d.isComplete && !remuxing);
+          const shouldBlockIncompatible = incompatible && !ALLOW_INCOMPATIBLE_PLAY;
+          const isBusyConverting = remuxing || transcodingAudio || d.isConverting;
+          playBtn.disabled = shouldBlockIncompatible || isBusyConverting || (!d.isReadyForStreaming && !d.isComplete && !remuxing);
           playBtn.addEventListener("click", () => {
             playTorrent(d);
           });
@@ -242,8 +249,15 @@
         if (lower.includes("remux")) {
           playerExtra.textContent = "Remuxing in progress – wait until status is Completed/Seeding.";
           playerExtra.classList.remove("muted");
+        } else if (lower.includes("transcodingaudio")) {
+          playerExtra.textContent = "Conversion audio en cours (H.264 → AAC)...";
+          playerExtra.classList.remove("muted");
         } else if (lower.includes("incompatible")) {
-          playerExtra.textContent = "Marked incompatible – playback is not available.";
+          if (ALLOW_INCOMPATIBLE_PLAY) {
+            playerExtra.textContent = "Marked incompatible – playback may fail or have issues.";
+          } else {
+            playerExtra.textContent = "Marked incompatible – playback is not available.";
+          }
           playerExtra.classList.remove("muted");
         } else if (lower.includes("codecunknown")) {
           playerExtra.textContent = "Codec unknown – playback may or may not work in your browser.";
