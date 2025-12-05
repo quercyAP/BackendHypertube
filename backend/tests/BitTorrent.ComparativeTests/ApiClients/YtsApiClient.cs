@@ -4,12 +4,12 @@ using BitTorrent.ComparativeTests.Models;
 namespace BitTorrent.ComparativeTests.ApiClients;
 
 /// <summary>
-/// Client pour l'API YTS (https://yts.mx)
+/// Client pour l'API YTS (https://yts.lt)
 /// </summary>
 public class YtsApiClient
 {
     private readonly HttpClient _httpClient;
-    private const string BaseUrl = "https://yts.mx/api/v2";
+    private const string BaseUrl = "https://yts.lt/api/v2";
 
     public YtsApiClient()
     {

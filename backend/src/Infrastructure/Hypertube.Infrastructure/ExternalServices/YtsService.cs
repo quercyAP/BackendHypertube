@@ -8,7 +8,7 @@ public class YtsService
 {
     private readonly HttpClient _httpClient;
     private readonly ILogger<YtsService> _logger;
-    private const string BaseUrl = "https://yts.mx/api/v2";
+    private const string BaseUrl = "https://yts.lt/api/v2";
 
     public YtsService(HttpClient httpClient, ILogger<YtsService> logger)
     {
