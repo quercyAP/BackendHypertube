@@ -81,9 +81,12 @@ services:
         condition: service_healthy
     networks:
       - hypertube-net
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     command: >
       sh -c "apt-get update && \
-             apt-get install -y ffmpeg && \
+             apt-get install -y ffmpeg dnsutils && \
              rm -rf /var/lib/apt/lists/* && \
              dotnet restore && \
              cd src/WebAPI/Hypertube.WebAPI && \
@@ -91,9 +94,6 @@ services:
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/api/v1/health"]
       interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
 
 # ==========================================
 # Networks

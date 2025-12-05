@@ -1,0 +1,523 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Hypertube · HLS/MSE Player</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: "Space Grotesk", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --bg: #050614;
+        --panel: #0f1024;
+        --panel-alt: #111432;
+        --border: rgba(255, 255, 255, 0.08);
+        --text: #f5f7ff;
+        --muted: #9ba2c6;
+        --accent: #7c3aed;
+        --accent-2: #22d3ee;
+        --success: #34d399;
+        --warning: #fbbf24;
+        --danger: #f87171;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 2rem clamp(1rem, 3vw, 3rem);
+        min-height: 100vh;
+        background: radial-gradient(circle at 10% 20%, rgba(124, 58, 237, 0.35), transparent 45%),
+          radial-gradient(circle at 80% 0%, rgba(34, 211, 238, 0.25), transparent 45%), var(--bg);
+        color: var(--text);
+      }
+
+      h1 {
+        margin: 0 0 1rem;
+        font-size: clamp(1.8rem, 3vw, 2.6rem);
+        letter-spacing: -0.02em;
+      }
+
+      p.lead {
+        margin: 0 0 2rem;
+        color: var(--muted);
+        max-width: 640px;
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(0, 360px) minmax(0, 1fr);
+        gap: 1.5rem;
+        align-items: flex-start;
+      }
+
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 1rem;
+        padding: 1.2rem;
+        box-shadow: 0 40px 120px rgba(5, 6, 20, 0.8);
+      }
+
+      label {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: var(--muted);
+        display: block;
+        margin-bottom: 0.35rem;
+      }
+
+      input {
+        width: 100%;
+        padding: 0.65rem 0.75rem;
+        border-radius: 0.6rem;
+        border: 1px solid var(--border);
+        background: var(--panel-alt);
+        color: var(--text);
+        font-size: 0.95rem;
+      }
+
+      input:focus {
+        outline: 2px solid rgba(124, 58, 237, 0.6);
+        border-color: transparent;
+      }
+
+      button {
+        border: none;
+        border-radius: 999px;
+        padding: 0.45rem 1.1rem;
+        font-size: 0.85rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: transform 160ms ease, box-shadow 160ms ease;
+      }
+
+      button.primary {
+        background: linear-gradient(120deg, var(--accent), var(--accent-2));
+        color: #050614;
+        box-shadow: 0 15px 30px rgba(124, 58, 237, 0.35);
+      }
+
+      button.secondary {
+        background: rgba(255, 255, 255, 0.04);
+        color: var(--text);
+        border: 1px solid var(--border);
+      }
+
+      button:disabled {
+        opacity: 0.5;
+        cursor: default;
+        box-shadow: none;
+      }
+
+      button:not(:disabled):hover {
+        transform: translateY(-1px);
+      }
+
+      .flex {
+        display: flex;
+        gap: 0.6rem;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+
+      .status-text {
+        font-size: 0.85rem;
+        color: var(--muted);
+        margin-top: 0.4rem;
+      }
+
+      ul#torrent-list {
+        list-style: none;
+        padding: 0;
+        margin: 1rem 0 0;
+        display: flex;
+        flex-direction: column;
+        gap: 0.7rem;
+      }
+
+      .torrent-card {
+        padding: 0.8rem;
+        border-radius: 0.9rem;
+        background: var(--panel-alt);
+        border: 1px solid transparent;
+        transition: border-color 150ms ease, transform 150ms ease;
+      }
+
+      .torrent-card:hover {
+        border-color: rgba(124, 58, 237, 0.5);
+        transform: translateY(-1px);
+      }
+
+      .torrent-title {
+        font-weight: 600;
+      }
+
+      .torrent-meta {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 0.8rem;
+        color: var(--muted);
+        margin: 0.35rem 0 0.6rem;
+      }
+
+      .progress-track {
+        width: 100%;
+        height: 0.35rem;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.08);
+        overflow: hidden;
+      }
+
+      .progress-fill {
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, var(--accent-2), var(--accent));
+      }
+
+      .badge {
+        padding: 0.1rem 0.6rem;
+        border-radius: 0.8rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        border: 1px solid transparent;
+      }
+
+      .badge.success {
+        color: var(--success);
+        border-color: rgba(52, 211, 153, 0.35);
+        background: rgba(52, 211, 153, 0.12);
+      }
+
+      .badge.warning {
+        color: var(--warning);
+        border-color: rgba(251, 191, 36, 0.4);
+        background: rgba(251, 191, 36, 0.12);
+      }
+
+      .badge.danger {
+        color: var(--danger);
+        border-color: rgba(248, 113, 113, 0.4);
+        background: rgba(248, 113, 113, 0.12);
+      }
+
+      video {
+        width: 100%;
+        border-radius: 1rem;
+        border: 1px solid var(--border);
+        background: #000;
+        min-height: 280px;
+      }
+
+      .player-state {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.8rem;
+        margin-top: 0.8rem;
+        align-items: center;
+        font-size: 0.9rem;
+      }
+
+      .pill {
+        padding: 0.2rem 0.75rem;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid var(--border);
+        font-weight: 500;
+      }
+
+      .log {
+        font-size: 0.8rem;
+        color: var(--muted);
+        margin-top: 0.4rem;
+        min-height: 1.2rem;
+      }
+
+      @media (max-width: 960px) {
+        .layout {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.5/dist/hls.min.js" defer></script>
+  </head>
+  <body>
+    <h1>Hypertube · HLS/MSE Player</h1>
+    <p class="lead">
+      Ce player consomme le MP4 final généré par notre pipeline maison, puis utilise un packaging HLS automatisé pour une lecture
+      fiable via MSE (hls.js). Choisis un torrent prêt, prépare la playlist HLS, et teste la lecture segmentée.
+    </p>
+    <div class="layout">
+      <aside class="panel">
+        <div class="flex" style="align-items: flex-end; gap: 0.9rem;">
+          <div style="flex: 1 1 200px;">
+            <label for="token">JWT Bearer token</label>
+            <input id="token" placeholder="Colle ton JWT ici" autocomplete="off" />
+          </div>
+          <div class="flex" style="flex-wrap: nowrap;">
+            <button class="secondary" id="save-token-btn">Save</button>
+            <button class="primary" id="load-btn">Refresh list</button>
+          </div>
+        </div>
+        <div class="status-text" id="list-state">Idle.</div>
+        <ul id="torrent-list"></ul>
+      </aside>
+
+      <section class="panel">
+        <video id="video" controls preload="metadata"></video>
+        <div class="player-state">
+          <div class="pill" id="player-title">–</div>
+          <div class="pill" id="player-status">Status: idle</div>
+          <div class="pill" id="player-note">No playlist generated yet.</div>
+        </div>
+        <div class="log" id="player-log"></div>
+      </section>
+    </div>
+
+    <script>
+      const API_BASE = "";
+      const tokenInput = document.getElementById("token");
+      const saveTokenBtn = document.getElementById("save-token-btn");
+      const loadBtn = document.getElementById("load-btn");
+      const listState = document.getElementById("list-state");
+      const listEl = document.getElementById("torrent-list");
+      const videoEl = document.getElementById("video");
+      const playerTitle = document.getElementById("player-title");
+      const playerStatus = document.getElementById("player-status");
+      const playerNote = document.getElementById("player-note");
+      const playerLog = document.getElementById("player-log");
+
+      let hlsInstance = null;
+
+      function getToken() {
+        return localStorage.getItem("hypertube_jwt") || "";
+      }
+
+      function setToken(value) {
+        localStorage.setItem("hypertube_jwt", value || "");
+      }
+
+      function initToken() {
+        const stored = getToken();
+        if (stored) {
+          tokenInput.value = stored;
+          listState.textContent = "Token chargé. Clique sur “Refresh list”.";
+        } else {
+          listState.textContent = "Colle un JWT puis clique sur “Refresh list”.";
+        }
+      }
+
+      function setStatus(text, tone = "muted") {
+        listState.textContent = text;
+        listState.style.color =
+          tone === "error" ? "var(--danger)" : tone === "ok" ? "var(--success)" : "var(--muted)";
+      }
+
+      async function fetchJson(path, options = {}) {
+        const token = tokenInput.value.trim();
+        if (!token) {
+          throw new Error("JWT manquant. Sauvegarde ton token d’abord.");
+        }
+
+        const res = await fetch(API_BASE + path, {
+          ...options,
+          headers: {
+            ...(options.headers || {}),
+            Authorization: "Bearer " + token,
+          },
+        });
+
+        if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          throw new Error(`HTTP ${res.status} – ${text || "Unexpected error"}`);
+        }
+
+        return res.json();
+      }
+
+      function renderTorrentList(downloads) {
+        listEl.innerHTML = "";
+        if (!downloads.length) {
+          listEl.innerHTML = '<li class="status-text">Aucun téléchargement actif.</li>';
+          return;
+        }
+
+        for (const d of downloads) {
+          const li = document.createElement("li");
+          li.className = "torrent-card";
+
+          const title = document.createElement("div");
+          title.className = "torrent-title";
+          title.textContent = d.movieTitle || "(sans titre)";
+
+          const meta = document.createElement("div");
+          meta.className = "torrent-meta";
+          meta.innerHTML = `<span>${(d.progress || 0).toFixed(1)} % — ${d.status || "?"}</span>
+            <span>${d.canStreamNow ? "Ready" : "Pending"}</span>`;
+
+          const progress = document.createElement("div");
+          progress.className = "progress-track";
+          const fill = document.createElement("div");
+          fill.className = "progress-fill";
+          fill.style.width = Math.min(100, Math.max(0, d.progress || 0)) + "%";
+          progress.appendChild(fill);
+
+          const actions = document.createElement("div");
+          actions.className = "flex";
+
+          const prepBtn = document.createElement("button");
+          prepBtn.className = "secondary";
+          prepBtn.textContent = "Prepare HLS";
+
+          const playBtn = document.createElement("button");
+          playBtn.className = "primary";
+          playBtn.textContent = "Play HLS";
+
+          const disabled =
+            !d.isComplete && !d.isReadyForStreaming && (d.status || "").toLowerCase().includes("remux");
+          prepBtn.disabled = disabled;
+          playBtn.disabled = disabled;
+
+          prepBtn.addEventListener("click", () => preparePlaylist(d));
+          playBtn.addEventListener("click", () => playTorrent(d));
+
+          const badge = document.createElement("span");
+          badge.className = "badge " + classifyStatus(d.status);
+          badge.textContent = d.status || "Unknown";
+
+          li.appendChild(title);
+          li.appendChild(meta);
+          li.appendChild(progress);
+          li.appendChild(actions);
+          actions.appendChild(prepBtn);
+          actions.appendChild(playBtn);
+          actions.appendChild(badge);
+
+          listEl.appendChild(li);
+        }
+      }
+
+      function classifyStatus(status = "") {
+        const s = status.toLowerCase();
+        if (s.includes("seeding") || s.includes("completed")) return "success";
+        if (s.includes("error") || s.includes("incompatible")) return "danger";
+        return "warning";
+      }
+
+      async function loadTorrents() {
+        try {
+          setStatus("Chargement des torrents…");
+          const data = await fetchJson("/api/torrents");
+          const downloads = Array.isArray(data.downloads) ? data.downloads : [];
+          renderTorrentList(downloads);
+          setStatus(`Trouvé ${downloads.length} torrent(s).`, "ok");
+        } catch (err) {
+          console.error(err);
+          setStatus(err.message || String(err), "error");
+        }
+      }
+
+      async function preparePlaylist(download) {
+        try {
+          setStatus("Packaging HLS en cours…");
+          playerLog.textContent = "Packaging HLS…";
+          const id = download.torrentId || download.id;
+          const res = await fetchJson(`/api/mse/hls/${id}`);
+          playerLog.textContent = `Playlist prête: ${res.playlistUrl}`;
+          setStatus("Playlist générée.", "ok");
+        } catch (err) {
+          console.error(err);
+          playerLog.textContent = err.message;
+          setStatus("Erreur packaging HLS.", "error");
+        }
+      }
+
+      async function playTorrent(download) {
+        const id = download.torrentId || download.id;
+        if (!id) {
+          playerLog.textContent = "Torrent ID manquant.";
+          return;
+        }
+
+        try {
+          playerTitle.textContent = download.movieTitle || "(sans titre)";
+          playerStatus.textContent = "Status: Preparing HLS…";
+          playerNote.textContent = "Packaging…";
+          playerLog.textContent = "Appel /api/mse/hls…";
+          const { playlistUrl } = await fetchJson(`/api/mse/hls/${id}`);
+          playerNote.textContent = `Playlist : ${playlistUrl}`;
+          playerLog.textContent = "Playlist produite. Initialisation hls.js…";
+
+          await attachHls(playlistUrl);
+
+          playerStatus.textContent = "Status: Buffering…";
+          videoEl.play().catch(() => {});
+        } catch (err) {
+          console.error(err);
+          playerStatus.textContent = "Status: Error";
+          playerLog.textContent = err.message || String(err);
+        }
+      }
+
+      async function attachHls(src) {
+        if (hlsInstance) {
+          hlsInstance.destroy();
+          hlsInstance = null;
+        }
+
+        if (window.Hls && Hls.isSupported()) {
+          hlsInstance = new Hls({
+            enableWorker: true,
+            lowLatencyMode: false,
+            backBufferLength: 90,
+          });
+          hlsInstance.loadSource(src);
+          hlsInstance.attachMedia(videoEl);
+          hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+            playerStatus.textContent = "Status: Playing HLS (MSE)";
+            playerLog.textContent = "Manifest parsé, lecture en cours.";
+          });
+          hlsInstance.on(Hls.Events.ERROR, (_, data) => {
+            playerLog.textContent = `[HLS ERROR] ${data.type} – ${data.details}`;
+            if (data.fatal) {
+              playerStatus.textContent = "Status: Fatal error";
+            }
+          });
+        } else if (videoEl.canPlayType("application/vnd.apple.mpegurl")) {
+          videoEl.src = src;
+          playerStatus.textContent = "Status: Native HLS";
+          playerLog.textContent = "HLS natif utilisé (Safari).";
+        } else {
+          throw new Error("HLS n’est pas supporté par ce navigateur.");
+        }
+      }
+
+      saveTokenBtn.addEventListener("click", () => {
+        setToken(tokenInput.value.trim());
+        setStatus("Token sauvegardé.", "ok");
+      });
+
+      loadBtn.addEventListener("click", () => {
+        loadTorrents();
+      });
+
+      window.addEventListener("beforeunload", () => {
+        if (hlsInstance) {
+          hlsInstance.destroy();
+        }
+      });
+
+      initToken();
+    </script>
+  </body>
+</html>

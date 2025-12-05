@@ -400,6 +400,36 @@ public class TorrentDownloadService : ITorrentDownloadService
         return Task.FromResult(downloadInfo.DownloadManager.Progress > 5.0);
     }
 
+    public Task<string?> GetFinalVideoPathForMseAsync(Guid torrentId, CancellationToken cancellationToken = default)
+    {
+        if (!_activeDownloads.TryGetValue(torrentId, out var downloadInfo))
+        {
+            return Task.FromResult<string?>(null);
+        }
+
+        // If conversion is still running, we are not ready for MSE
+        if (downloadInfo.IsConverting)
+        {
+            return Task.FromResult<string?>(null);
+        }
+
+        var filePath = downloadInfo.ConvertedFilePath ?? downloadInfo.PersistedFilePath ?? GetLargestVideoFilePath(downloadInfo);
+
+        if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
+        {
+            return Task.FromResult<string?>(null);
+        }
+
+        // For the MSE demo, we only accept MP4 files (produced by remux or audio transcode)
+        var extension = Path.GetExtension(filePath).ToLowerInvariant();
+        if (extension != ".mp4")
+        {
+            return Task.FromResult<string?>(null);
+        }
+
+        return Task.FromResult<string?>(filePath);
+    }
+
     private async Task StartConversionIfNeededAsync(Guid torrentId)
     {
         if (!_activeDownloads.TryGetValue(torrentId, out var downloadInfo))

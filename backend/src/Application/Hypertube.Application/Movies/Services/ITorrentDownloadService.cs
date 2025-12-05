@@ -15,4 +15,6 @@ public interface ITorrentDownloadService
     Task<string?> GetVideoFilePathAsync(Guid torrentId, CancellationToken cancellationToken = default);
 
     Task<bool> IsReadyForStreamingAsync(Guid torrentId, CancellationToken cancellationToken = default);
+
+    Task<string?> GetFinalVideoPathForMseAsync(Guid torrentId, CancellationToken cancellationToken = default);
 }

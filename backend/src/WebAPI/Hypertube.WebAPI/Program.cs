@@ -122,6 +122,7 @@ try
     builder.Services.AddScoped<IVideoConversionService, VideoConversionService>();
     builder.Services.AddScoped<IVideoCodecDetector, VideoCodecDetector>();
     builder.Services.AddScoped<IVideoRemuxService, VideoRemuxService>();
+    builder.Services.AddSingleton<IHlsPackagingService, HlsPackagingService>();
 
     // Register Subtitle Service
     builder.Services.AddHttpClient<ISubtitleService, SubtitleService>();
@@ -156,7 +157,7 @@ try
     {
         options.AddPolicy("AllowFrontend", policy =>
         {
-            policy.WithOrigins("http://localhost:3000", "http://localhost:5173")
+            policy.WithOrigins("http://localhost:3000", "http://localhost:5173", "http://localhost:5000")
                   .AllowAnyHeader()
                   .AllowAnyMethod()
                   .AllowCredentials();
@@ -249,6 +250,23 @@ try
 
     app.UseDefaultFiles();
     app.UseStaticFiles();
+
+    // Explicit static mapping for HLS playlists/segments (serves .m3u8, .ts, etc.)
+    var webRootForHls = app.Environment.WebRootPath
+        ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+    var hlsPath = Path.Combine(webRootForHls, "hls");
+    if (!Directory.Exists(hlsPath))
+    {
+        Directory.CreateDirectory(hlsPath);
+        Log.Information("Created HLS directory: {Path}", hlsPath);
+    }
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        FileProvider = new PhysicalFileProvider(hlsPath),
+        RequestPath = "/hls",
+        ServeUnknownFileTypes = true,
+        DefaultContentType = "application/octet-stream"
+    });
 
     // Static files for uploads
     var uploadsPath = Path.Combine(Directory.GetCurrentDirectory(), "uploads");
