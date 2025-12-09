@@ -419,14 +419,7 @@ public class TorrentDownloadService : ITorrentDownloadService
         {
             return Task.FromResult<string?>(null);
         }
-
-        // For the MSE demo, we only accept MP4 files (produced by remux or audio transcode)
-        var extension = Path.GetExtension(filePath).ToLowerInvariant();
-        if (extension != ".mp4")
-        {
-            return Task.FromResult<string?>(null);
-        }
-
+        
         return Task.FromResult<string?>(filePath);
     }
 

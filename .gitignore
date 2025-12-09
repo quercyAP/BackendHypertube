@@ -11,7 +11,7 @@
 *.user
 *.userosscache
 *.sln.docstates
-
+backend/src/WebAPI/Hypertube.WebAPI/wwwroot/hls/
 # Build outputs
 bin/
 obj/
