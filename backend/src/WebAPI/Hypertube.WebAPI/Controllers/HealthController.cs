@@ -9,12 +9,6 @@ namespace Hypertube.WebAPI.Controllers;
 [Route("api/v1/[controller]")]
 public class HealthController : ControllerBase
 {
-    private readonly ILogger<HealthController> _logger;
-
-    public HealthController(ILogger<HealthController> logger)
-    {
-        _logger = logger;
-    }
 
     /// <summary>
     /// Get API health status
@@ -24,8 +18,6 @@ public class HealthController : ControllerBase
     [ProducesResponseType(StatusCodes.Status200OK)]
     public IActionResult GetHealth()
     {
-        _logger.LogInformation("Health check requested");
-
         return Ok(new
         {
             status = "healthy",

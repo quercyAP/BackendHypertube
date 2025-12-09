@@ -10,16 +10,19 @@ namespace Hypertube.Infrastructure.Services;
 public class HlsPackagingService : IHlsPackagingService
 {
     private readonly ITorrentDownloadService _torrentDownloadService;
+    private readonly IVideoCodecDetector _codecDetector;
     private readonly ILogger<HlsPackagingService> _logger;
     private readonly string _hlsRootDirectory;
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _locks = new();
 
     public HlsPackagingService(
         ITorrentDownloadService torrentDownloadService,
+        IVideoCodecDetector codecDetector,
         IWebHostEnvironment environment,
         ILogger<HlsPackagingService> logger)
     {
         _torrentDownloadService = torrentDownloadService;
+        _codecDetector = codecDetector;
         _logger = logger;
 
         var webRoot = environment.WebRootPath;
@@ -27,7 +30,6 @@ public class HlsPackagingService : IHlsPackagingService
         {
             webRoot = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
         }
-
         _hlsRootDirectory = Path.Combine(webRoot, "hls");
         Directory.CreateDirectory(_hlsRootDirectory);
     }
@@ -111,6 +113,9 @@ public class HlsPackagingService : IHlsPackagingService
             _logger.LogInformation("[HLS] Playlist ready for torrent {TorrentId} in {Elapsed}ms – stored at {PlaylistPath}",
                 torrentId, stopwatch.ElapsedMilliseconds, playlistPath);
 
+            // Best-effort extraction of internal text subtitle tracks to WebVTT files
+            await ExtractSubtitlesAsync(finalVideoPath, torrentFolder, cancellationToken);
+
             return BuildRelativePlaylistUrl(torrentId);
         }
         finally
@@ -143,5 +148,77 @@ public class HlsPackagingService : IHlsPackagingService
     private static string BuildRelativePlaylistUrl(Guid torrentId)
     {
         return $"/hls/{torrentId:N}/index.m3u8";
+    }
+
+    private async Task ExtractSubtitlesAsync(string inputPath, string torrentFolder, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var codecInfo = await _codecDetector.DetectCodecsAsync(inputPath, cancellationToken);
+            if (codecInfo == null || codecInfo.SubtitleTracks == null || codecInfo.SubtitleTracks.Count == 0)
+            {
+                _logger.LogInformation("[HLS][Subs] No internal subtitle tracks found for {Input}", inputPath);
+                return;
+            }
+
+            foreach (var track in codecInfo.SubtitleTracks)
+            {
+                // For now, only try to extract text-based subtitles. Image-based codecs (e.g. pgs) are skipped.
+                var codec = track.Codec ?? string.Empty;
+                if (string.IsNullOrEmpty(codec))
+                {
+                    continue;
+                }
+
+                // Common text subtitle codecs we can reasonably convert to WebVTT
+                if (!(codec.Contains("subrip") || codec.Contains("ass") || codec.Contains("mov_text") || codec.Contains("webvtt")))
+                {
+                    _logger.LogInformation("[HLS][Subs] Skipping non-text subtitle track Index={Index}, Codec={Codec} for {Input}",
+                        track.Index, track.Codec, inputPath);
+                    continue;
+                }
+
+                var outputPath = Path.Combine(torrentFolder, $"sub_{track.Index}.vtt");
+
+                _logger.LogInformation("[HLS][Subs] Extracting subtitle track Index={Index}, Codec={Codec} to {Output}",
+                    track.Index, track.Codec, outputPath);
+
+                try
+                {
+                    await FFMpegArguments
+                        .FromFileInput(inputPath)
+                        .OutputToFile(
+                            outputPath,
+                            overwrite: true,
+                            options => options
+                                // Use global stream index (0:{Index}) instead of relative subtitle index (0:s:{n})
+                                .WithCustomArgument($"-map 0:{track.Index}")
+                                .WithCustomArgument("-f webvtt"))
+                        .CancellableThrough(cancellationToken)
+                        .ProcessAsynchronously();
+
+                    if (File.Exists(outputPath))
+                    {
+                        _logger.LogInformation("[HLS][Subs] Subtitle track Index={Index} extracted successfully to {Output}",
+                            track.Index, outputPath);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("[HLS][Subs] Expected subtitle file not found after extraction: {Output}", outputPath);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex,
+                        "[HLS][Subs] Failed to extract subtitle track Index={Index} (Codec={Codec}) from {Input}",
+                        track.Index, track.Codec, inputPath);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            // Subtitle extraction is best-effort: never fail HLS packaging because of it.
+            _logger.LogError(ex, "[HLS][Subs] Unexpected error while extracting subtitles for {Input}", inputPath);
+        }
     }
 }

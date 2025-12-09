@@ -1,4 +1,5 @@
 using Serilog;
+using Serilog.Events;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -19,6 +20,9 @@ using Hypertube.WebAPI.Swagger;
 // Configure Serilog
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()
+    .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
+    .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
+    .Enrich.FromLogContext()
     .WriteTo.Console()
     .WriteTo.File("logs/hypertube-.log", rollingInterval: RollingInterval.Day)
     .CreateLogger();
@@ -122,7 +126,8 @@ try
     builder.Services.AddScoped<IVideoConversionService, VideoConversionService>();
     builder.Services.AddScoped<IVideoCodecDetector, VideoCodecDetector>();
     builder.Services.AddScoped<IVideoRemuxService, VideoRemuxService>();
-    builder.Services.AddSingleton<IHlsPackagingService, HlsPackagingService>();
+    // Scoped lifetime because HlsPackagingService depends on scoped services (e.g. IVideoCodecDetector)
+    builder.Services.AddScoped<IHlsPackagingService, HlsPackagingService>();
 
     // Register Subtitle Service
     builder.Services.AddHttpClient<ISubtitleService, SubtitleService>();
@@ -243,7 +248,20 @@ try
     }
 
     // Serilog request logging
-    app.UseSerilogRequestLogging();
+    app.UseSerilogRequestLogging(options =>
+    {
+        options.GetLevel = (httpContext, elapsed, ex) =>
+        {
+            var path = httpContext.Request.Path.Value;
+
+            if (path != null && path.Contains("/api/v1/health", StringComparison.OrdinalIgnoreCase))
+            {
+                return LogEventLevel.Debug;
+            }
+
+            return LogEventLevel.Information;
+        };
+    });
 
     // CORS
     app.UseCors("AllowFrontend");

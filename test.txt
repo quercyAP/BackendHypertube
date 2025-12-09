@@ -1,10 +1,35 @@
-"title": "Pirates of Silicon Valley",
-"torrentUrl": "https://itorrents.net/torrent/DA5A9C0A367D08927BB95EAB73CE82F323C4FA79.torrent",
+{
+  "torrentUrl": "https://itorrents.net/torrent/DA5A9C0A367D08927BB95EAB73CE82F323C4FA79.torrent",
+  "movieTitle": "Pirates of Silicon Valley"
+}
 GOOD
 
-"title": "Amélie",
-"torrentUrl": "https://itorrents.net/torrent/D1C5BD9A2EEC5FE6EBA19E7F663AF3E8D932AB8E.torrent",
+
+{
+  "torrentUrl": "https://itorrents.net/torrent/D1C5BD9A2EEC5FE6EBA19E7F663AF3E8D932AB8E.torrent",
+  "movieTitle": "Amélie"
+}
 GOOD
+
+{
+  "torrentUrl": "https://itorrents.net/torrent/5EA5B41272146464783611E9E7CCBC56011B12EB.torrent",
+  "movieTitle": "The Tale of The Princess Kaguya"
+}
+GOOD
+
+{
+  "torrentUrl": "https://itorrents.net/torrent/AEDDCD5E812B13382165A6EBBB0097833B4B47C5.torrent",
+  "movieTitle": "Blade"
+}
+GOOD
+
+{
+  "torrentUrl": "https://yts.lt/torrent/download/F5D61BF3D57082BA2EE1305DA5DF8DCD10D34539?d6DcccH46GjxYXMNvGrqR99gkvYklEoJeTAVH3-d",
+  "movieTitle": "The Dark Knight"
+}
+GOOD
+
+
 
 "title": "La Haine",
 "torrentUrl": "https://itorrents.net/torrent/B4CADA42F869B6B142B55FD72CD490E29AEE8615.torrent",

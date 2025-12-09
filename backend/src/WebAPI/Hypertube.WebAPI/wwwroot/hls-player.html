@@ -255,7 +255,7 @@
     <h1>Hypertube · HLS/MSE Player</h1>
     <p class="lead">
       Ce player consomme le MP4 final généré par notre pipeline maison, puis utilise un packaging HLS automatisé pour une lecture
-      fiable via MSE (hls.js). Choisis un torrent prêt, prépare la playlist HLS, et teste la lecture segmentée.
+      fiable via MSE (hls.js). Choisis un torrent prêt, prépare la playlist HLS, et teste la lecture segmentée. 
     </p>
     <div class="layout">
       <aside class="panel">
@@ -280,6 +280,12 @@
           <div class="pill" id="player-status">Status: idle</div>
           <div class="pill" id="player-note">No playlist generated yet.</div>
         </div>
+        <div class="player-state">
+          <label for="subtitle-select">Sous-titres</label>
+          <select id="subtitle-select">
+            <option value="none">Aucun</option>
+          </select>
+        </div>
         <div class="log" id="player-log"></div>
       </section>
     </div>
@@ -296,8 +302,10 @@
       const playerStatus = document.getElementById("player-status");
       const playerNote = document.getElementById("player-note");
       const playerLog = document.getElementById("player-log");
+      const subtitleSelect = document.getElementById("subtitle-select");
 
       let hlsInstance = null;
+      let currentTorrentId = null;
 
       function getToken() {
         return localStorage.getItem("hypertube_jwt") || "";
@@ -458,6 +466,12 @@
           playerNote.textContent = `Playlist : ${playlistUrl}`;
           playerLog.textContent = "Playlist produite. Initialisation hls.js…";
 
+          // Memorize current torrent id for subtitle loading
+          currentTorrentId = id;
+
+          // Load available subtitles for this torrent and populate the selector
+          await loadSubtitlesForTorrent(id);
+
           await attachHls(playlistUrl);
 
           playerStatus.textContent = "Status: Buffering…";
@@ -486,6 +500,9 @@
           hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
             playerStatus.textContent = "Status: Playing HLS (MSE)";
             playerLog.textContent = "Manifest parsé, lecture en cours.";
+
+            // Ré-applique la sélection de sous-titres à chaque nouvelle playlist
+            applySelectedSubtitles();
           });
           hlsInstance.on(Hls.Events.ERROR, (_, data) => {
             playerLog.textContent = `[HLS ERROR] ${data.type} – ${data.details}`;
@@ -502,6 +519,50 @@
         }
       }
 
+      function clearManagedSubtitleTracks() {
+        const tracks = Array.from(videoEl.querySelectorAll('track[data-managed="true"]'));
+        for (const t of tracks) {
+          t.remove();
+        }
+      }
+
+      function applySelectedSubtitles() {
+        clearManagedSubtitleTracks();
+
+        if (!subtitleSelect) {
+          return;
+        }
+
+        const value = subtitleSelect.value;
+        if (!value || value === "none") {
+          return;
+        }
+
+        const subtitleUrl = value;
+
+        const track = document.createElement("track");
+        track.kind = "subtitles";
+        track.srclang = "en";
+        track.label = "Interne";
+        track.src = subtitleUrl;
+        track.default = true;
+        track.setAttribute("data-managed", "true");
+
+        videoEl.appendChild(track);
+
+        // Force l’activation du TextTrack si disponible (certains navigateurs ne respectent pas toujours 'default')
+        const tracks = videoEl.textTracks;
+        for (let i = 0; i < tracks.length; i++) {
+          const tt = tracks[i];
+          // On active le premier track de type "subtitles" que l’on trouve
+          if (tt.kind === "subtitles") {
+            tt.mode = "showing";
+          } else {
+            tt.mode = "disabled";
+          }
+        }
+      }
+
       saveTokenBtn.addEventListener("click", () => {
         setToken(tokenInput.value.trim());
         setStatus("Token sauvegardé.", "ok");
@@ -510,6 +571,40 @@
       loadBtn.addEventListener("click", () => {
         loadTorrents();
       });
+
+      if (subtitleSelect) {
+        subtitleSelect.addEventListener("change", () => {
+          applySelectedSubtitles();
+        });
+      }
+
+      async function loadSubtitlesForTorrent(torrentId) {
+        if (!subtitleSelect) return;
+
+        // Reset options
+        subtitleSelect.innerHTML = "";
+        const noneOpt = document.createElement("option");
+        noneOpt.value = "none";
+        noneOpt.textContent = "Aucun";
+        subtitleSelect.appendChild(noneOpt);
+
+        try {
+          const subs = await fetchJson(`/api/mse/subtitles/${torrentId}`);
+          if (Array.isArray(subs)) {
+            for (const s of subs) {
+              const opt = document.createElement("option");
+              opt.value = s.url;
+              opt.textContent = s.fileName || s.url;
+              subtitleSelect.appendChild(opt);
+            }
+          }
+        } catch (err) {
+          console.error("Failed to load subtitles", err);
+        }
+
+        // By default keep "Aucun" selected; user can enable subs explicitly
+        subtitleSelect.value = "none";
+      }
 
       window.addEventListener("beforeunload", () => {
         if (hlsInstance) {

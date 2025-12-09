@@ -1,99 +1,146 @@
-Bonne question, c’est exactement ce qu’il faudra expliquer en soutenance.
+# Bilan de la journée – Pipeline MSE/HLS + sous-titres internes
 
-## 1. Ce qu’on avait avant
+## 1. Ce qui a été fait
 
-- **Player classique**  
-  - `/api/torrents/{id}/stream` → HTTP Range direct sur un seul MP4.  
-  - OK pour une vidéo déjà prête, mais :
-    - pas d’adaptation réseau,
-    - pas de vraie logique de buffering fin,
-    - pas de manifest (on ne voit pas les segments côté réseau).
+### 1.1. Généralisation de l’entrée vidéo pour le HLS/MSE
 
-- **Tentatives MSE “maison”** (plans 4/5)  
-  - On générait nous‑mêmes des segments MP4 via `ffmpeg -f segment`.  
-  - Problème : fMP4/boxes non conformes → MSE refusait de jouer (erreurs silencieuses ou fatales).  
-  - Tout le packaging MSE était “fait main”, très fragile.
+- **Fichier**  
+- [backend/src/Infrastructure/Hypertube.Infrastructure/Services/TorrentDownloadService.cs](cci:7://file:///home/jgiampor/Desktop/BackendHypertube/backend/src/Infrastructure/Hypertube.Infrastructure/Services/TorrentDownloadService.cs:0:0-0:0)
+- **Fonction / méthode**  
+- [GetFinalVideoPathForMseAsync(Guid torrentId, ...)](cci:1://file:///home/jgiampor/Desktop/BackendHypertube/backend/src/Infrastructure/Hypertube.Infrastructure/Services/TorrentDownloadService.cs:402:4-423:5)
+- **Idée**  
+- On n’exige plus `.mp4` uniquement : la méthode renvoie maintenant le meilleur fichier vidéo disponible (MP4 ou MKV web‑compatible), ce qui permet de packager HLS directement à partir d’un MKV H.264/AAC.
 
-## 2. Nouvelle approche : MP4 maison → HLS/MSE “industriel”
+### 1.2. Détection des pistes de sous-titres internes
 
-### Avantages techniques
+- **Fichiers**  
+- [backend/src/Application/Hypertube.Application/Common/Services/IVideoCodecDetector.cs](cci:7://file:///home/jgiampor/Desktop/BackendHypertube/backend/src/Application/Hypertube.Application/Common/Services/IVideoCodecDetector.cs:0:0-0:0)  
+- [backend/src/Infrastructure/Hypertube.Infrastructure/Services/VideoCodecDetector.cs](cci:7://file:///home/jgiampor/Desktop/BackendHypertube/backend/src/Infrastructure/Hypertube.Infrastructure/Services/VideoCodecDetector.cs:0:0-0:0)
+- **Types / méthodes**  
+- `class VideoCodecInfo`  
+- `class SubtitleTrackInfo`  
+- `Task<VideoCodecInfo?> DetectCodecsAsync(...)`
+- **Idée**  
+- [VideoCodecInfo](cci:2://file:///home/jgiampor/Desktop/BackendHypertube/backend/src/Application/Hypertube.Application/Common/Services/IVideoCodecDetector.cs:4:0-13:1) contient maintenant une liste `SubtitleTracks`.  
+- [VideoCodecDetector](cci:2://file:///home/jgiampor/Desktop/BackendHypertube/backend/src/Infrastructure/Hypertube.Infrastructure/Services/VideoCodecDetector.cs:9:0-125:1) utilise `FFProbe.AnalyseAsync(...)` et renseigne les pistes `subtitle` (index global, codec).  
+- Log de debug ajouté dans :
+- [TorrentDownloadService.StartConversionIfNeededAsync(Guid torrentId)](cci:1://file:///home/jgiampor/Desktop/BackendHypertube/backend/src/Infrastructure/Hypertube.Infrastructure/Services/TorrentDownloadService.cs:425:4-583:5)  
+    pour afficher les pistes détectées (`[Subtitles] Detected internal subtitle track ...`).
 
-- **On garde la pédagogie du sujet**  
-  - Toute la partie **torrent → fichier → détecter codecs → remux/transcodage** reste 100% maison (C# + FFmpeg-core).
-  - On n’utilise **aucune lib “torrent → stream”** (webtorrent, peerflix, etc.).
+### 1.3. Extraction automatique en WebVTT des sous-titres internes
 
-- **On délègue la partie la plus complexe**  
-  - Le packaging HLS (manifest `.m3u8`, segments `.ts`) est fait par FFmpeg, qui respecte les specs HLS.  
-  - La gestion MSE (buffer, erreurs réseau, reconnections) est faite par `hls.js` dans le navigateur.
+- **Fichier**  
+- [backend/src/Infrastructure/Hypertube.Infrastructure/Services/HlsPackagingService.cs](cci:7://file:///home/jgiampor/Desktop/BackendHypertube/backend/src/Infrastructure/Hypertube.Infrastructure/Services/HlsPackagingService.cs:0:0-0:0)
+- **Méthodes**  
+- `Task<string?> GetOrCreatePlaylistAsync(Guid torrentId, ...)`  
+- `private async Task ExtractSubtitlesAsync(string inputPath, string torrentFolder, CancellationToken cancellationToken)`
+- **Idée**  
+- Après génération de la playlist HLS (`index.m3u8` + `seg_*.ts`), [GetOrCreatePlaylistAsync](cci:1://file:///home/jgiampor/Desktop/BackendHypertube/backend/src/Infrastructure/Hypertube.Infrastructure/Services/HlsPackagingService.cs:108:4-197:5) appelle [ExtractSubtitlesAsync](cci:1://file:///home/jgiampor/Desktop/BackendHypertube/backend/src/Infrastructure/Hypertube.Infrastructure/Services/HlsPackagingService.cs:152:4-222:5).  
+- [ExtractSubtitlesAsync](cci:1://file:///home/jgiampor/Desktop/BackendHypertube/backend/src/Infrastructure/Hypertube.Infrastructure/Services/HlsPackagingService.cs:152:4-222:5) :
+- rappelle [IVideoCodecDetector.DetectCodecsAsync](cci:1://file:///home/jgiampor/Desktop/BackendHypertube/backend/src/Infrastructure/Hypertube.Infrastructure/Services/VideoCodecDetector.cs:23:4-96:5) pour récupérer `SubtitleTracks`,
+- filtre les codecs texte (`subrip`, `ass`, `mov_text`, `webvtt`),
+- extrait chaque piste vers `sub_{Index}.vtt` dans le dossier HLS du torrent :
+    - `wwwroot/hls/{torrentIdN}/sub_*.vtt`,
+- extraction best‑effort (les erreurs de sous‑titres ne cassent pas le packaging HLS).
 
-- **Plus robuste côté player**  
-  - HLS est un **standard** : manifest + segments clairement définis.  
-  - `hls.js` gère :
-    - parsing du manifest,
-    - récupération des segments,
-    - injection dans MSE,
-    - gestion d’erreurs et de retry.
+### 1.4. Exposition des sous-titres via API dédiée MSE
 
-- **Plus démonstratif**  
-  - Tu peux montrer dans l’onglet Network du navigateur :
-    - la requête [index.m3u8](cci:7://file:///home/Administrateur/BackendHypertube/backend/src/WebAPI/Hypertube.WebAPI/wwwroot/hls/db0f2dd72afc4174a4544b2650c1babf/home/Administrateur/BackendHypertube/backend/src/WebAPI/Hypertube.WebAPI/wwwroot/hls/db0f2dd72afc4174a4544b2650c1babf/index.m3u8:0:0-0:0),
-    - la liste des segments `seg_00000.ts`, `seg_00001.ts`, etc.  
-  - Ça illustre très bien “streaming segmenté” par rapport au gros MP4 unique.
+- **Fichier**  
+- [backend/src/WebAPI/Hypertube.WebAPI/Controllers/MseController.cs](cci:7://file:///home/jgiampor/Desktop/BackendHypertube/backend/src/WebAPI/Hypertube.WebAPI/Controllers/MseController.cs:0:0-0:0)
+- **Méthodes**  
+- `Task<IActionResult> GetHlsPlaylist(Guid torrentId, ...)` (déjà existante)  
+- `IActionResult GetSubtitles(Guid torrentId)`
+- **Idée**  
+- [MseController](cci:2://file:///home/jgiampor/Desktop/BackendHypertube/backend/src/WebAPI/Hypertube.WebAPI/Controllers/MseController.cs:8:0-89:1) injecte désormais aussi `IWebHostEnvironment` (en plus de `IHlsPackagingService`, `ILogger`).  
+- Nouveau endpoint :
+- `GET /api/mse/subtitles/{torrentId}`  
+- Parcourt `wwwroot/hls/{torrentIdN}/`  
+- Liste tous les fichiers `sub_*.vtt` et renvoie un tableau JSON :
+    - `[{ fileName: \"sub_3.vtt\", url: \"/hls/{idN}/sub_3.vtt\" }, ...]`.
 
-## 3. Quelles libs, où, comment ?
+### 1.5. Adaptation du player HLS/MSE de test pour consommer ces sous-titres
 
-### Côté backend
+- **Fichier**  
+- [backend/src/WebAPI/Hypertube.WebAPI/wwwroot/hls-player.html](cci:7://file:///home/jgiampor/Desktop/BackendHypertube/backend/src/WebAPI/Hypertube.WebAPI/wwwroot/hls-player.html:0:0-0:0)
+- **Parties modifiées**  
+- Section HTML :
+- Ajout d’un `<select id=\"subtitle-select\">` (options dynamiques) sous la vidéo.
+- Logique JS :
+- Variables :
+    - `const subtitleSelect = document.getElementById(\"subtitle-select\");`
+    - `let hlsInstance = null;`
+    - `let currentTorrentId = null;`
+- Dans [playTorrent(download)](cci:1://file:///home/jgiampor/Desktop/BackendHypertube/backend/src/WebAPI/Hypertube.WebAPI/wwwroot/hls-player.html:452:6-483:7) :
+    - Appel de `GET /api/mse/hls/{torrentId}` pour obtenir `playlistUrl`.
+    - Mémorisation du torrent courant : `currentTorrentId = id;`
+    - Appel de `await loadSubtitlesForTorrent(id);`
+    - Puis `await attachHls(playlistUrl);`
+- Nouveaux helpers :
+    - `async function loadSubtitlesForTorrent(torrentId)`
+    - Appelle `/api/mse/subtitles/{torrentId}`.
+    - Reconstruit les options du `<select>` (`value = s.url`, `label = s.fileName`).
+    - `function clearManagedSubtitleTracks()`
+    - Supprime les `<track>` ajoutés par le script (`data-managed="true"`).
+    - `function applySelectedSubtitles()`
+    - Récupère `subtitleSelect.value` (URL complète du `.vtt`).
+    - Ajoute dynamiquement un `<track kind=\"subtitles\" src=\"...\">` sur la balise `<video>`.
+    - Force `textTrack.mode = 'showing'` pour les pistes `subtitles`.
+- Intégration avec `hls.js` :
+    - Dans [attachHls(src)](cci:1://file:///home/jgiampor/Desktop/BackendHypertube/backend/src/WebAPI/Hypertube.WebAPI/wwwroot/hls-player.html:485:6-519:7) :
+    - Sur `Hls.Events.MANIFEST_PARSED`, ré‑applique la sélection courante :
+        - [applySelectedSubtitles();](cci:1://file:///home/jgiampor/Desktop/BackendHypertube/backend/src/WebAPI/Hypertube.WebAPI/wwwroot/hls-player.html:528:6-563:7)
+- Gestion des événements :
+    - `subtitleSelect.addEventListener(\"change\", () => applySelectedSubtitles());`
 
-- **Lib principale** : `FFMpegCore` (wrapper C# autour de `ffmpeg` CLI).  
-- **Utilisation HLS** :
-  - Classe : [HlsPackagingService](cci:2://file:///home/Administrateur/BackendHypertube/backend/src/Infrastructure/Hypertube.Infrastructure/Services/HlsPackagingService.cs:9:0-137:1)  
-    [backend/src/Infrastructure/Hypertube.Infrastructure/Services/HlsPackagingService.cs](cci:7://file:///home/Administrateur/BackendHypertube/backend/src/Infrastructure/Hypertube.Infrastructure/Services/HlsPackagingService.cs:0:0-0:0)
-  - Interface exposée : [IHlsPackagingService](cci:2://file:///home/Administrateur/BackendHypertube/backend/src/Application/Hypertube.Application/Common/Services/IHlsPackagingService.cs:6:0-13:1)  
-    [backend/src/Application/Hypertube.Application/Common/Services/IHlsPackagingService.cs](cci:7://file:///home/Administrateur/BackendHypertube/backend/src/Application/Hypertube.Application/Common/Services/IHlsPackagingService.cs:0:0-0:0)
-  - Enregistrement DI :  
-    `builder.Services.AddSingleton<IHlsPackagingService, HlsPackagingService>();`  
-    dans [Program.cs](cci:7://file:///home/Administrateur/BackendHypertube/backend/src/WebAPI/Hypertube.WebAPI/Program.cs:0:0-0:0).
-  - Endpoint API :
-    - [MseController.GetHlsPlaylist(Guid torrentId)](cci:1://file:///home/Administrateur/BackendHypertube/backend/src/WebAPI/Hypertube.WebAPI/Controllers/MseController.cs:20:4-46:5)  
-      `GET /api/mse/hls/{torrentId}`  
-      [backend/src/WebAPI/Hypertube.WebAPI/Controllers/MseController.cs](cci:7://file:///home/Administrateur/BackendHypertube/backend/src/WebAPI/Hypertube.WebAPI/Controllers/MseController.cs:0:0-0:0)
-    - Il appelle [GetOrCreatePlaylistAsync](cci:1://file:///home/Administrateur/BackendHypertube/backend/src/Infrastructure/Hypertube.Infrastructure/Services/HlsPackagingService.cs:34:4-120:5) qui :
-      - récupère le MP4 final via [ITorrentDownloadService.GetFinalVideoPathForMseAsync](cci:1://file:///home/Administrateur/BackendHypertube/backend/src/Infrastructure/Hypertube.Infrastructure/Services/TorrentDownloadService.cs:402:4-430:5),
-      - lance `ffmpeg` pour générer HLS sous `wwwroot/hls/{torrentIdN}/index.m3u8`.
+### 1.6. Ajustements DI / lifetimes
 
-- **Static files** :
-  - Mapping explicite [/hls](cci:7://file:///home/Administrateur/BackendHypertube/backend/src/WebAPI/Hypertube.WebAPI/wwwroot/hls:0:0-0:0) → [wwwroot/hls](cci:7://file:///home/Administrateur/BackendHypertube/backend/src/WebAPI/Hypertube.WebAPI/wwwroot/hls:0:0-0:0) dans [Program.cs](cci:7://file:///home/Administrateur/BackendHypertube/backend/src/WebAPI/Hypertube.WebAPI/Program.cs:0:0-0:0) avec `UseStaticFiles`.
+- **Fichier**  
+- [backend/src/WebAPI/Hypertube.WebAPI/Program.cs](cci:7://file:///home/jgiampor/Desktop/BackendHypertube/backend/src/WebAPI/Hypertube.WebAPI/Program.cs:0:0-0:0)
+- **Changements**  
+- Enregistrement des services vidéo :
+- `IVideoConversionService` → `AddScoped`
+- [IVideoCodecDetector](cci:2://file:///home/jgiampor/Desktop/BackendHypertube/backend/src/Application/Hypertube.Application/Common/Services/IVideoCodecDetector.cs:28:0-33:1) → `AddScoped`
+- `IVideoRemuxService` → `AddScoped`
+- `IHlsPackagingService` → **`AddScoped`** (au lieu de `AddSingleton`)  
+    car [HlsPackagingService](cci:2://file:///home/jgiampor/Desktop/BackendHypertube/backend/src/Infrastructure/Hypertube.Infrastructure/Services/HlsPackagingService.cs:9:0-223:1) dépend de services scoped ([IVideoCodecDetector](cci:2://file:///home/jgiampor/Desktop/BackendHypertube/backend/src/Application/Hypertube.Application/Common/Services/IVideoCodecDetector.cs:28:0-33:1)).
 
-### Côté frontend
+---
 
-- **Lib utilisée** : `hls.js` (côté navigateur, pour HLS + MSE).  
-- **Où** :  
-  - Fichier : [backend/src/WebAPI/Hypertube.WebAPI/wwwroot/hls-player.html](cci:7://file:///home/Administrateur/BackendHypertube/backend/src/WebAPI/Hypertube.WebAPI/wwwroot/hls-player.html:0:0-0:0)  
-  - Chargement :  
-    ```html
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.5/dist/hls.min.js" defer></script>
-    ```
-- **Comment** :
-  - La page :
-    - liste les torrents via `/api/torrents` (JWT dans `Authorization: Bearer …`),
-    - appelle `/api/mse/hls/{torrentId}` pour obtenir `playlistUrl`,
-    - crée/attache un `Hls()` si `Hls.isSupported()` :
-      ```js
-      const hls = new Hls({ enableWorker: true });
-      hls.loadSource(playlistUrl);
-      hls.attachMedia(videoElement);
-      hls.on(Hls.Events.MANIFEST_PARSED, () => videoElement.play());
-      ```
-    - fallback natif HLS (`video.canPlayType('application/vnd.apple.mpegurl')`) pour Safari.
+## 2. Ce qu’il reste à faire (pistes futures)
 
-## 4. Message à faire passer en soutenance
+### 2.1. Généraliser et enrichir les métadonnées de sous-titres
 
-- **Avant** :  
-  - soit MP4 direct (simple, mais pas vraiment MSE / streaming segmenté),  
-  - soit MSE bricolé avec des segments non conformes.
-- **Maintenant** :  
-  - pipeline torrent+conversion **maison**,  
-  - packaging HLS + lecture MSE assurés par des outils pros (`ffmpeg` + `hls.js`),  
-  - totalement dans les règles du sujet (on ne fait jamais “torrent → stream” via une lib).  
+- Ajouter, côté détection ([VideoCodecDetector](cci:2://file:///home/jgiampor/Desktop/BackendHypertube/backend/src/Infrastructure/Hypertube.Infrastructure/Services/VideoCodecDetector.cs:9:0-125:1)), des infos supplémentaires par [SubtitleTrackInfo](cci:2://file:///home/jgiampor/Desktop/BackendHypertube/backend/src/Application/Hypertube.Application/Common/Services/IVideoCodecDetector.cs:15:0-26:1) :
+- langue (`Language`),
+- titre / rôle (`Title`, `IsForced` si dispo dans les métadonnées).
+- Propager ces infos jusqu’au JSON renvoyé par `/api/mse/subtitles/{torrentId}` (au lieu de n’exposer que `fileName` / `url`).
 
-Si tu veux, je peux t’écrire un petit paragraphe “Avantages de l’approche HLS/MSE” à copier-coller dans ton rapport ou [plan6.md](cci:7://file:///home/Administrateur/BackendHypertube/plan6.md:0:0-0:0).
+### 2.2. Gérer plusieurs pistes de sous-titres internes
+
+- Gérer plusieurs `sub_*.vtt` par torrent :
+- UI côté player pour distinguer les différentes pistes (ex : `FR`, `EN`, `EN (Signs)`, etc.).
+- Politique de nommage ou métadonnées (ex : `sub_{Index}_{lang}.vtt`).
+
+### 2.3. Support des sous-titres externes
+
+- Pipeline (à concevoir) :
+- Upload ou récupération de fichiers `.srt` externes.
+- Conversion `.srt` → `.vtt` (via FFmpeg ou utilitaire dédié).
+- Stockage dans un dossier dédié par torrent (ou réutilisation du dossier HLS).
+- Ajout de ces pistes externes dans la réponse `/api/mse/subtitles/{torrentId}` au même titre que les internes.
+
+### 2.4. Interaction avec le futur front “réel”
+
+- Fournir au dev front (F#/React) :
+- la liste des endpoints :
+- `/api/torrents`
+- `/api/mse/hls/{torrentId}`
+- `/api/mse/subtitles/{torrentId}`
+- la logique de base illustrée dans [hls-player.html](cci:7://file:///home/jgiampor/Desktop/BackendHypertube/backend/src/WebAPI/Hypertube.WebAPI/wwwroot/hls-player.html:0:0-0:0) :
+- usage de `hls.js` pour `playlistUrl`,
+- usage de `<track>` + `textTracks` pour les sous-titres.
+- Le vrai front pourra ensuite :
+- refaire une UI propre autour de cette API,
+- intégrer la sélection des sous-titres de manière plus ergonomique (menu, icône CC, etc.).
+
+---

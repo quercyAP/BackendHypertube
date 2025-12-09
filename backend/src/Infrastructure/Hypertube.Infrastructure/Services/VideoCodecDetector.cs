@@ -53,6 +53,24 @@ public class VideoCodecDetector : IVideoCodecDetector
             // Extract container format
             var containerFormat = mediaInfo.Format.FormatName?.ToLowerInvariant() ?? string.Empty;
 
+            // Extract internal subtitle streams (if any)
+            var subtitleTracks = new List<SubtitleTrackInfo>();
+            foreach (var subtitleStream in mediaInfo.SubtitleStreams)
+            {
+                try
+                {
+                    subtitleTracks.Add(new SubtitleTrackInfo
+                    {
+                        Index = subtitleStream.Index,
+                        Codec = subtitleStream.CodecName?.ToLowerInvariant() ?? string.Empty
+                    });
+                }
+                catch
+                {
+                    // Best-effort: ignore malformed subtitle stream metadata
+                }
+            }
+
             // Determine if web-compatible
             var isWebCompatible = IsWebCompatibleCodecs(videoCodec, audioCodec, containerFormat);
 
@@ -61,12 +79,13 @@ public class VideoCodecDetector : IVideoCodecDetector
                 VideoCodec = videoCodec,
                 AudioCodec = audioCodec,
                 ContainerFormat = containerFormat,
-                IsWebCompatible = isWebCompatible
+                IsWebCompatible = isWebCompatible,
+                SubtitleTracks = subtitleTracks
             };
 
             _logger.LogInformation(
-                "Detected codecs - Video: {VideoCodec}, Audio: {AudioCodec}, Container: {Container}, WebCompatible: {IsWebCompatible}",
-                videoCodec, audioCodec, containerFormat, isWebCompatible);
+                "Detected codecs - Video: {VideoCodec}, Audio: {AudioCodec}, Container: {Container}, WebCompatible: {IsWebCompatible}, Subtitles: {SubtitleCount}",
+                videoCodec, audioCodec, containerFormat, isWebCompatible, subtitleTracks.Count);
 
             return codecInfo;
         }

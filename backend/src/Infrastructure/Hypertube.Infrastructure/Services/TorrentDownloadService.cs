@@ -455,6 +455,21 @@ public class TorrentDownloadService : ITorrentDownloadService
             return;
         }
 
+        // Log detected internal subtitle tracks (for debugging / inspection)
+        if (codecInfo.SubtitleTracks != null && codecInfo.SubtitleTracks.Count > 0)
+        {
+            foreach (var sub in codecInfo.SubtitleTracks)
+            {
+                _logger.LogInformation(
+                    "[Subtitles] Detected internal subtitle track Index={Index}, Codec={Codec} for {FilePath}",
+                    sub.Index, sub.Codec, videoFilePath);
+            }
+        }
+        else
+        {
+            _logger.LogInformation("[Subtitles] No internal subtitle tracks detected for {FilePath}", videoFilePath);
+        }
+
         // If codecs + container are already web-compatible, use the original file directly
         if (codecInfo.IsWebCompatible)
         {
