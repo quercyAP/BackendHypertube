@@ -90,7 +90,7 @@ public class SubtitlesController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>WebVTT subtitle file</returns>
     [HttpGet("{id}/subtitles")]
-    [Authorize]
+    [AllowAnonymous]
     public async Task<IActionResult> GetSubtitle(
         Guid id,
         [FromQuery] string lang,
@@ -127,7 +127,7 @@ public class SubtitlesController : ControllerBase
                 return NotFound(new { message = "No IMDb ID available for this movie" });
             }
 
-            // Search for subtitle in requested language
+            // Search for subtitles in requested language (may return multiple candidates)
             var subtitles = await _subtitleService.SearchSubtitlesAsync(
                 movie.ImdbId,
                 new[] { lang },
@@ -140,8 +140,6 @@ public class SubtitlesController : ControllerBase
                 return NotFound(new { message = $"No subtitles found for language: {lang}" });
             }
 
-            var subtitle = subtitles.First();
-
             // Create output directory for this movie
             var outputDir = Path.Combine(
                 Environment.GetEnvironmentVariable("DOWNLOAD_DIRECTORY")
@@ -149,12 +147,37 @@ public class SubtitlesController : ControllerBase
                 "subtitles",
                 id.ToString());
 
-            // Download subtitle (SRT format)
-            var srtPath = await _subtitleService.DownloadSubtitleAsync(
-                subtitle.Id,
-                lang,
-                outputDir,
-                cancellationToken);
+            string? srtPath = null;
+
+            // Try each candidate until one successfully downloads
+            foreach (var candidate in subtitles)
+            {
+                try
+                {
+                    srtPath = await _subtitleService.DownloadSubtitleAsync(
+                        candidate.Id,
+                        lang,
+                        outputDir,
+                        cancellationToken);
+
+                    if (!string.IsNullOrEmpty(srtPath))
+                    {
+                        break;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex,
+                        "Failed to download subtitle candidate {SubtitleId} for movie {MovieId} in language {Language}",
+                        candidate.Id, id, lang);
+                }
+            }
+
+            if (string.IsNullOrEmpty(srtPath))
+            {
+                _logger.LogInformation("All subtitle candidates failed to download for movie {MovieId} in language {Language}", id, lang);
+                return NotFound(new { message = "Subtitle not available from external provider" });
+            }
 
             // Convert to WebVTT
             var vttPath = await _subtitleService.ConvertSrtToWebVttAsync(srtPath, cancellationToken);
@@ -169,7 +192,10 @@ public class SubtitlesController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error serving subtitle for movie {MovieId}, language {Language}", id, lang);
-            return StatusCode(500, new { message = "Failed to fetch subtitle", error = ex.Message });
+
+            // Best-effort: if the underlying provider cannot deliver the subtitle (e.g. /download 404),
+            // expose this as a 404 so the client can fall back gracefully instead of a hard 500.
+            return NotFound(new { message = "Subtitle not available from external provider", error = ex.Message });
         }
     }
 }

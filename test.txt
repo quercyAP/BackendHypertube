@@ -2,6 +2,12 @@
   "torrentUrl": "https://itorrents.net/torrent/DA5A9C0A367D08927BB95EAB73CE82F323C4FA79.torrent",
   "movieTitle": "Pirates of Silicon Valley"
 }
+{
+  "torrentUrl": "https://itorrents.net/torrent/DA5A9C0A367D08927BB95EAB73CE82F323C4FA79.torrent",
+  "movieTitle": "Pirates of Silicon Valley",
+  "movieId": "66ce4966-bfb7-484a-9fd5-a6e8cbbf677a",
+  "imdbId": "tt0168122"
+}
 GOOD
 
 
@@ -15,11 +21,23 @@ GOOD
   "torrentUrl": "https://itorrents.net/torrent/5EA5B41272146464783611E9E7CCBC56011B12EB.torrent",
   "movieTitle": "The Tale of The Princess Kaguya"
 }
+{
+  "torrentUrl": "https://itorrents.net/torrent/5EA5B41272146464783611E9E7CCBC56011B12EB.torrent",
+  "movieTitle": "The Tale of The Princess Kaguya",
+  "movieId": "05eb953d-92dd-4d59-8913-4288fae7b41a",
+  "imdbId": "tt2576852"
+}
 GOOD
 
 {
   "torrentUrl": "https://itorrents.net/torrent/AEDDCD5E812B13382165A6EBBB0097833B4B47C5.torrent",
   "movieTitle": "Blade"
+}
+{
+  "torrentUrl": "https://itorrents.net/torrent/AEDDCD5E812B13382165A6EBBB0097833B4B47C5.torrent",
+  "movieTitle": "Blade",
+  "movieId": "812c939c-92b2-4b9f-83d9-8f880bde7dbe",
+  "imdbId": "tt0120611"
 }
 GOOD
 

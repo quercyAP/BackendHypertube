@@ -115,24 +115,23 @@ public class SubtitleService : ISubtitleService
                 return new List<SubtitleInfo>();
             }
 
-            // Convert to SubtitleInfo and group by language (take first result per language)
+            // Convert to SubtitleInfo without collapsing per language so that callers
+            // can try multiple candidates if some files are not downloadable.
             var subtitles = result.Data
-                .GroupBy(s => s.Attributes?.Language)
-                .Where(g => g.Key != null)
-                .Select(g => g.First())
                 .Select(s =>
                 {
+                    var language = s.Attributes?.Language ?? string.Empty;
                     var fileId = s.Attributes?.Files?.FirstOrDefault()?.FileId;
                     return new SubtitleInfo
                     {
                         Id = fileId.HasValue ? fileId.Value.ToString() : string.Empty,
-                        Language = s.Attributes?.Language ?? string.Empty,
-                        LanguageName = GetLanguageName(s.Attributes?.Language ?? string.Empty),
+                        Language = language,
+                        LanguageName = GetLanguageName(language),
                         DownloadUrl = fileId.HasValue ? fileId.Value.ToString() : string.Empty,
                         Format = "srt"
                     };
                 })
-                .Where(s => !string.IsNullOrEmpty(s.Id))
+                .Where(s => !string.IsNullOrEmpty(s.Id) && !string.IsNullOrEmpty(s.Language))
                 .ToList();
 
             _logger.LogInformation("Found {Count} subtitle languages for IMDb ID: {ImdbId}",
@@ -159,8 +158,10 @@ public class SubtitleService : ISubtitleService
                 subtitleId, language);
 
             // Request download link
+            // IMPORTANT: use a relative URL without leading '/' so we keep the "/api/v1" prefix
+            // configured in BaseAddress, same pattern as in SearchSubtitlesAsync.
             var downloadLinkResponse = await _httpClient.PostAsync(
-                "/download",
+                "download",
                 new StringContent(JsonSerializer.Serialize(new { file_id = int.Parse(subtitleId) }),
                     Encoding.UTF8, "application/json"),
                 cancellationToken);
