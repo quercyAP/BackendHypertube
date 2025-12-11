@@ -24,6 +24,21 @@ public class SubtitleTrackInfo
     /// Subtitle codec name (e.g. "subrip", "ass", "hdmv_pgs_subtitle").
     /// </summary>
     public string Codec { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Optional language code for the subtitle track (e.g. "en", "fr").
+    /// </summary>
+    public string? Language { get; set; }
+
+    /// <summary>
+    /// Optional human-readable title/role of the track if provided in metadata.
+    /// </summary>
+    public string? Title { get; set; }
+
+    /// <summary>
+    /// Indicates whether the track is marked as forced in the container metadata.
+    /// </summary>
+    public bool IsForced { get; set; }
 }
 
 public interface IVideoCodecDetector

@@ -4,7 +4,7 @@ namespace Hypertube.Application.Movies.Services;
 
 public interface ITorrentDownloadService
 {
-    Task<Guid> StartDownloadAsync(string torrentUrl, string movieTitle, CancellationToken cancellationToken = default);
+    Task<Guid> StartDownloadAsync(string torrentUrl, string movieTitle, Guid movieId, string? imdbId, CancellationToken cancellationToken = default);
 
     Task<TorrentDownloadProgressDto?> GetProgressAsync(Guid torrentId, CancellationToken cancellationToken = default);
 
@@ -17,4 +17,6 @@ public interface ITorrentDownloadService
     Task<bool> IsReadyForStreamingAsync(Guid torrentId, CancellationToken cancellationToken = default);
 
     Task<string?> GetFinalVideoPathForMseAsync(Guid torrentId, CancellationToken cancellationToken = default);
+
+    Task<(Guid MovieId, string? ImdbId)?> GetMovieInfoForTorrentAsync(Guid torrentId, CancellationToken cancellationToken = default);
 }

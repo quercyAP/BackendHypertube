@@ -178,7 +178,16 @@ public class HlsPackagingService : IHlsPackagingService
                     continue;
                 }
 
-                var outputPath = Path.Combine(torrentFolder, $"sub_{track.Index}.vtt");
+                var safeLang = (track.Language ?? "und").Trim().ToLowerInvariant();
+                safeLang = SanitizeForFileNameSegment(safeLang);
+                if (string.IsNullOrWhiteSpace(safeLang))
+                {
+                    safeLang = "und";
+                }
+
+                var suffix = track.IsForced ? "_forced" : string.Empty;
+                var fileName = $"sub_{track.Index}_{safeLang}{suffix}.vtt";
+                var outputPath = Path.Combine(torrentFolder, fileName);
 
                 _logger.LogInformation("[HLS][Subs] Extracting subtitle track Index={Index}, Codec={Codec} to {Output}",
                     track.Index, track.Codec, outputPath);
@@ -220,5 +229,25 @@ public class HlsPackagingService : IHlsPackagingService
             // Subtitle extraction is best-effort: never fail HLS packaging because of it.
             _logger.LogError(ex, "[HLS][Subs] Unexpected error while extracting subtitles for {Input}", inputPath);
         }
+    }
+
+    private static string SanitizeForFileNameSegment(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return string.Empty;
+        }
+
+        var chars = value.ToCharArray();
+        for (var i = 0; i < chars.Length; i++)
+        {
+            var c = chars[i];
+            if (!(char.IsLetterOrDigit(c) || c == '-' || c == '_'))
+            {
+                chars[i] = '-';
+            }
+        }
+
+        return new string(chars).Trim('-');
     }
 }

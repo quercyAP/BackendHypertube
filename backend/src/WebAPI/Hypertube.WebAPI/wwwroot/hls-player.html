@@ -539,11 +539,14 @@
         }
 
         const subtitleUrl = value;
+        const selectedOption = subtitleSelect.options[subtitleSelect.selectedIndex];
+        const lang = (selectedOption && selectedOption.dataset.language) || "en";
+        const label = (selectedOption && selectedOption.textContent) || "Subtitles";
 
         const track = document.createElement("track");
         track.kind = "subtitles";
-        track.srclang = "en";
-        track.label = "Interne";
+        track.srclang = lang;
+        track.label = label;
         track.src = subtitleUrl;
         track.default = true;
         track.setAttribute("data-managed", "true");
@@ -591,10 +594,36 @@
         try {
           const subs = await fetchJson(`/api/mse/subtitles/${torrentId}`);
           if (Array.isArray(subs)) {
-            for (const s of subs) {
+            for (let i = 0; i < subs.length; i++) {
+              const s = subs[i];
               const opt = document.createElement("option");
               opt.value = s.url;
-              opt.textContent = s.fileName || s.url;
+
+              let lang = (s.language || "").toString();
+              if (lang.toLowerCase() === "und") {
+                lang = "";
+              }
+              let label;
+
+              if (s.title) {
+                label = s.title;
+              } else if (lang) {
+                label = lang.toUpperCase();
+              } else {
+                label = `Track ${i + 1}`;
+              }
+
+              if (s.isForced) {
+                label += " [forced]";
+              }
+
+              opt.textContent = label;
+              if (lang) {
+                opt.dataset.language = lang;
+              }
+              if (s.isForced) {
+                opt.dataset.forced = "true";
+              }
               subtitleSelect.appendChild(opt);
             }
           }

@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Text.Json.Serialization;
 using Hypertube.Application.Common.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -30,8 +31,13 @@ public class SubtitleService : ISubtitleService
         _apiKey = Environment.GetEnvironmentVariable("OPENSUBTITLES_API_KEY")
             ?? throw new InvalidOperationException("OPENSUBTITLES_API_KEY environment variable is required");
 
-        _baseUrl = Environment.GetEnvironmentVariable("OPENSUBTITLES_BASE_URL")
-            ?? "https://api.opensubtitles.com/api/v1";
+        // Normalize base URL so that BaseAddress always points to "https://<host>/api/v1/"
+        var rawBaseUrl = Environment.GetEnvironmentVariable("OPENSUBTITLES_BASE_URL")
+            ?? "https://api.opensubtitles.com";
+
+        var baseUri = new Uri(rawBaseUrl);
+        var apiV1Base = new Uri(baseUri, "/api/v1/");
+        _baseUrl = apiV1Base.ToString().TrimEnd('/');
 
         _userAgent = Environment.GetEnvironmentVariable("OPENSUBTITLES_USER_AGENT")
             ?? "Hypertube v1.0";
@@ -46,7 +52,7 @@ public class SubtitleService : ISubtitleService
         Directory.CreateDirectory(_subtitlesDirectory);
 
         // Configure HttpClient
-        _httpClient.BaseAddress = new Uri(_baseUrl);
+        _httpClient.BaseAddress = new Uri(_baseUrl + "/");
         _httpClient.DefaultRequestHeaders.Add("Api-Key", _apiKey);
         _httpClient.DefaultRequestHeaders.Add("User-Agent", _userAgent);
     }
@@ -58,12 +64,16 @@ public class SubtitleService : ISubtitleService
     {
         try
         {
-            // Remove "tt" prefix if present
-            var cleanImdbId = imdbId.Replace("tt", "");
+            // OpenSubtitles expects the numeric part of the IMDb ID (e.g. "0120611" for "tt0120611").
+            // The public API currently redirects tt-prefixed IDs to the numeric form (see Location header).
+            var cleanImdbId = imdbId.StartsWith("tt", StringComparison.OrdinalIgnoreCase)
+                ? imdbId.Substring(2)
+                : imdbId;
 
-            // Build query parameters
             var languagesParam = string.Join(",", languages);
-            var url = $"/subtitles?imdb_id={cleanImdbId}&languages={languagesParam}";
+            // IMPORTANT: do not start the relative URL with '/' when using BaseAddress "https://api.opensubtitles.com/api/v1"
+            // otherwise HttpClient will drop the "/api/v1" prefix and call "https://api.opensubtitles.com/subtitles".
+            var url = $"subtitles?imdb_id={cleanImdbId}&languages={languagesParam}";
 
             _logger.LogInformation("Searching subtitles for IMDb ID: {ImdbId}, Languages: {Languages}",
                 imdbId, languagesParam);
@@ -77,10 +87,27 @@ public class SubtitleService : ISubtitleService
             }
 
             var content = await response.Content.ReadAsStringAsync(cancellationToken);
-            var result = JsonSerializer.Deserialize<OpenSubtitlesSearchResponse>(content, new JsonSerializerOptions
+
+            _logger.LogDebug("OpenSubtitles raw response for IMDb ID {ImdbId} (first 200 chars): {Snippet}",
+                imdbId,
+                content.Length > 200 ? content.Substring(0, 200) : content);
+
+            OpenSubtitlesSearchResponse? result;
+            try
             {
-                PropertyNameCaseInsensitive = true
-            });
+                result = JsonSerializer.Deserialize<OpenSubtitlesSearchResponse>(content, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+            }
+            catch (JsonException jsonEx)
+            {
+                _logger.LogError(jsonEx,
+                    "Failed to deserialize OpenSubtitles response for IMDb ID {ImdbId}. Raw payload starts with: {Snippet}",
+                    imdbId,
+                    content.Length > 200 ? content.Substring(0, 200) : content);
+                return new List<SubtitleInfo>();
+            }
 
             if (result?.Data == null || result.Data.Count == 0)
             {
@@ -302,6 +329,7 @@ public class SubtitleService : ISubtitleService
 
     private class OpenSubtitlesFile
     {
+        [JsonPropertyName("file_id")]
         public int? FileId { get; set; }
     }
 

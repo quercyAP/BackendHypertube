@@ -45,11 +45,18 @@ public class TorrentsController : ControllerBase
             return BadRequest(new { message = "MovieTitle is required" });
         }
 
+        if (request.MovieId == Guid.Empty)
+        {
+            return BadRequest(new { message = "MovieId is required" });
+        }
+
         try
         {
             var torrentId = await _torrentDownloadService.StartDownloadAsync(
                 request.TorrentUrl,
                 request.MovieTitle,
+                request.MovieId,
+                request.ImdbId,
                 cancellationToken
             );
 
@@ -159,4 +166,6 @@ public class StartDownloadRequest
 {
     public string TorrentUrl { get; set; } = string.Empty;
     public string MovieTitle { get; set; } = string.Empty;
+    public Guid MovieId { get; set; }
+    public string? ImdbId { get; set; }
 }

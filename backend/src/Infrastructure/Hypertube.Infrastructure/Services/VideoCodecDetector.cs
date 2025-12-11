@@ -59,10 +59,49 @@ public class VideoCodecDetector : IVideoCodecDetector
             {
                 try
                 {
+                    string? language = null;
+                    string? title = null;
+                    var isForced = false;
+
+                    try
+                    {
+                        var tags = subtitleStream.Tags;
+                        if (tags != null)
+                        {
+                            if (tags.TryGetValue("language", out var langValue) && !string.IsNullOrWhiteSpace(langValue))
+                            {
+                                language = langValue.Trim();
+                            }
+
+                            if (tags.TryGetValue("title", out var titleValue) && !string.IsNullOrWhiteSpace(titleValue))
+                            {
+                                title = titleValue.Trim();
+                            }
+                        }
+                    }
+                    catch
+                    {
+                    }
+
+                    try
+                    {
+                        var disposition = subtitleStream.Disposition;
+                        if (disposition != null && disposition.TryGetValue("forced", out var forcedFlag))
+                        {
+                            isForced = forcedFlag;
+                        }
+                    }
+                    catch
+                    {
+                    }
+
                     subtitleTracks.Add(new SubtitleTrackInfo
                     {
                         Index = subtitleStream.Index,
-                        Codec = subtitleStream.CodecName?.ToLowerInvariant() ?? string.Empty
+                        Codec = subtitleStream.CodecName?.ToLowerInvariant() ?? string.Empty,
+                        Language = language,
+                        Title = title,
+                        IsForced = isForced
                     });
                 }
                 catch

@@ -40,7 +40,7 @@ public class TorrentDownloadService : ITorrentDownloadService
         LoadPersistedTorrents();
     }
 
-    public async Task<Guid> StartDownloadAsync(string torrentUrl, string movieTitle, CancellationToken cancellationToken = default)
+    public async Task<Guid> StartDownloadAsync(string torrentUrl, string movieTitle, Guid movieId, string? imdbId, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -103,6 +103,8 @@ public class TorrentDownloadService : ITorrentDownloadService
                     {
                         Id = torrentId,
                         MovieTitle = movieTitle,
+                        MovieId = movieId,
+                        ImdbId = imdbId,
                         TorrentFile = torrentFile,
                         DownloadManager = null,
                         StartedAt = DateTime.UtcNow,
@@ -183,6 +185,8 @@ public class TorrentDownloadService : ITorrentDownloadService
             {
                 Id = torrentId,
                 MovieTitle = movieTitle,
+                MovieId = movieId,
+                ImdbId = imdbId,
                 TorrentFile = torrentFile,
                 DownloadManager = downloadManager,
                 StartedAt = DateTime.UtcNow,
@@ -255,6 +259,16 @@ public class TorrentDownloadService : ITorrentDownloadService
             _logger.LogError(ex, "Failed to start torrent download from URL: {TorrentUrl}", torrentUrl);
             throw;
         }
+    }
+
+    public Task<(Guid MovieId, string? ImdbId)?> GetMovieInfoForTorrentAsync(Guid torrentId, CancellationToken cancellationToken = default)
+    {
+        if (_activeDownloads.TryGetValue(torrentId, out var info))
+        {
+            return Task.FromResult<(Guid MovieId, string? ImdbId)?>(new(info.MovieId, info.ImdbId));
+        }
+
+        return Task.FromResult<(Guid MovieId, string? ImdbId)?>(null);
     }
 
     public Task<TorrentDownloadProgressDto?> GetProgressAsync(Guid torrentId, CancellationToken cancellationToken = default)
@@ -698,6 +712,8 @@ public class TorrentDownloadService : ITorrentDownloadService
     {
         public Guid Id { get; set; }
         public string MovieTitle { get; set; } = string.Empty;
+        public Guid MovieId { get; set; }
+        public string? ImdbId { get; set; }
         public required BitTorrent.Models.TorrentFile TorrentFile { get; set; }
         public TorrentDownloadManager? DownloadManager { get; set; }
         public DateTime StartedAt { get; set; }
@@ -718,6 +734,8 @@ public class TorrentDownloadService : ITorrentDownloadService
     {
         public Guid TorrentId { get; set; }
         public string MovieTitle { get; set; } = string.Empty;
+        public Guid MovieId { get; set; }
+        public string? ImdbId { get; set; }
         public string InfoHash { get; set; } = string.Empty;
         public string DownloadPath { get; set; } = string.Empty;
         public string FilePath { get; set; } = string.Empty;
@@ -761,6 +779,8 @@ public class TorrentDownloadService : ITorrentDownloadService
         {
             TorrentId = downloadInfo.Id,
             MovieTitle = downloadInfo.MovieTitle,
+            MovieId = downloadInfo.MovieId,
+            ImdbId = downloadInfo.ImdbId,
             InfoHash = downloadInfo.TorrentFile.InfoHashHex,
             DownloadPath = downloadInfo.DownloadPath,
             FilePath = filePath,
@@ -814,6 +834,8 @@ public class TorrentDownloadService : ITorrentDownloadService
                     {
                         Id = torrentId,
                         MovieTitle = metadata.MovieTitle,
+                        MovieId = metadata.MovieId,
+                        ImdbId = metadata.ImdbId,
                         TorrentFile = new BitTorrent.Models.TorrentFile
                         {
                             InfoHash = ParseHexString(metadata.InfoHash),
