@@ -95,6 +95,28 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:5000/api/v1/health"]
       interval: 10s
 
+  # ==========================================
+  # Frontend (.NET 8)
+  # ==========================================
+  hypertube-frontend:
+    container_name: hypertube-frontend
+    restart: unless-stopped
+    build:
+      context: ./frontend/
+      dockerfile: Dockerfile
+
+    environment:
+      HR_BACKEND_AUTH_URL: ${BACKEND_AUTH_URL}
+      HR_BACKEND_MOVIES_URL: ${BACKEND_MOVIES_URL}
+
+    ports:
+      - "8080:8080"
+
+    networks:
+      - hypertube-net
+    stdin_open: true
+    tty: true
+
 # ==========================================
 # Networks
 # ==========================================

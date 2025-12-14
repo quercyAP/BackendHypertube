@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="250" height="120" viewBox="0 0 250 120">
+    <defs>
+        <!-- Dégradés crème et chocolat -->
+        <linearGradient id="creamGradient" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#fae8d2"/>
+            <stop offset="100%" stop-color="#f6d9b8"/>
+        </linearGradient>
+        <linearGradient id="chocoGradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#b77b52"/>
+            <stop offset="100%" stop-color="#7a4a2a"/>
+        </linearGradient>
+        <radialGradient id="coffeeSurface" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#8b5a33"/>
+            <stop offset="100%" stop-color="#5a341c"/>
+        </radialGradient>
+    </defs>
+
+    <!-- Texte CookieCream avec inversion de couleurs -->
+    <!-- Bordure externe ultra fine pour lisibilité -->
+    <text x="0" y="80"
+          font-family="'Pacifico', cursive"
+          font-size="48"
+          fill="url(#chocoGradient)"
+          stroke="url(#creamGradient)"
+          stroke-width="4"
+          paint-order="stroke">
+        CookieCream
+    </text>
+    <!-- Liseré fin extérieur -->
+    <text x="0" y="80"
+          font-family="'Pacifico', cursive"
+          font-size="48"
+          fill="none"
+          stroke="#5a341c"
+          stroke-width="0.8"
+          paint-order="stroke">
+        CookieCream
+    </text>
+</svg>

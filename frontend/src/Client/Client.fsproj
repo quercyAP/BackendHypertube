@@ -1,0 +1,34 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <DefineConstants>FABLE_COMPILER</DefineConstants>
+    </PropertyGroup>
+    <ItemGroup>
+        <Content Include="styles\index.css" />
+        <None Include="postcss.config.js" />
+        <None Include="tailwind.config.js" />
+        <None Include="index.html" />
+        <None Include="paket.references" />
+        <None Include="vite.config.mts" />
+        <Compile Include="React\Feliz.Swiper.fs" />
+        <Compile Include="React\Feliz.ReactPlayer.fs" />
+        <Compile Include="Components\Common.fs" />
+        <Compile Include="Components\Page.fs" />
+        <Compile Include="Components\Logo.fs" />
+        <Compile Include="Components\Typography.fs" />
+        <Compile Include="Components\MovieCard.fs" />
+        <Compile Include="Components\MovieCarousel.fs" />
+        <Compile Include="Components\Header.fs" />
+        <Compile Include="Components\Footer.fs" />
+        <Compile Include="Pages\LandingPage.fs" />
+        <Compile Include="Pages\AuthPage.fs" />
+        <Compile Include="Pages\MoviePage.fs" />
+        <Compile Include="Index.fs" />
+        <Compile Include="App.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\Shared\Shared.fsproj" />
+    </ItemGroup>
+    <Import Project="..\..\.paket\Paket.Restore.targets" />
+</Project>
